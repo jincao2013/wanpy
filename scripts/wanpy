@@ -1,0 +1,201 @@
+#!/usr/bin/env python
+
+# Copyright (C) 2020 Jin Cao
+#
+# This file is distributed as part of the wanpy code and
+# under the terms of the GNU General Public License. See the
+# file LICENSE in the root directory of the wanpy
+# distribution, or http://www.gnu.org/licenses/gpl-3.0.txt
+#
+# The wanpy code is hosted on GitHub:
+#
+# https://github.com/jincao2013/wanpy
+
+
+import time
+import os
+import sys
+import re
+import numpy as np
+from optparse import OptionParser
+# sys.path.append(os.environ.get('PYTHONPATH'))
+from wanpy.env import __version__
+from wanpy.core.structure import Htb
+from wanpy.core.errorhandler import CommandNotFoundError
+from wanpy.interface.wannier90 import W90_eig
+from wanpy.interface.buildwannier import WannierInterpolation
+
+
+def h5htb(argv):
+    usage = 'wanpy htb [-h] [-e fermi_level] \n' + \
+    'Integrate tight-binding informations into a single .h5 file \n'
+
+    if os.path.exists('vasprun.xml'):
+        fermi_vasprun = float(re.findall('.\d+.\d+', os.popen('grep efermi vasprun.xml').readline())[0])
+    else:
+        fermi_vasprun = 0.0
+
+    parser = OptionParser(usage)
+    parser.add_option("-e", "--efermi", action="store", type="float", dest="fermi", default=fermi_vasprun,
+                      help='fermi level')
+    parser.add_option("--seedname", action="store", type="str", dest="seedname", default='wannier90')
+    # parser.add_option("-t", "--type", action="store", type="str", dest="storetype", default='h5')
+    parser.add_option('--wsvec', action="store_true", dest="load_wsvec",
+                      help="if load wannier90_wsvec.dat, default is False")
+    parser.add_option('--v1', action="store_true", dest="v1_w90interface",
+                      help="set v1_w90interface=True in loading .nnkp, default is False")
+
+    options, args = parser.parse_args(argv)
+
+    fermi = options.fermi
+    seedname = options.seedname
+    load_wsvec = options.load_wsvec
+    v1_w90interface = options.v1_w90interface
+    # storetype = options.storetype
+
+    # print instructions
+    print('You should check wcc before used for calculations.')
+    print('Make sure the following setting in wannier90: ')
+    print('guiding_centres      =  T')
+    print('translate_home_cell  =  F (it may shift the wcc with a lattice, which is far away from the inital projections)')
+    print('use_ws_distance      =  F (see J. Phys. Cond. Matt. 32, 165902 (2020))')
+    # print('transl_inv           =  T')    # postw90 tag
+
+    htb = Htb(fermi)
+
+    T0 = time.time()
+    htb.load_wannier90_dat(seedname=seedname, load_wsvec=load_wsvec, v1_w90interface=v1_w90interface)
+    T1 = time.time()
+    print('complete loading hamiltonian from {}, time consuming {:.3f} s'.format(seedname, T1-T0))
+
+    print('Fermi level = {} eV'.format(htb.fermi))
+
+    print('The following items are saved in .h5 format')
+    print(htb._contents)
+    print(htb._contents_large)
+
+    htb.save_htb()
+    T2 = time.time()
+    print('h5htb complete, time consuming {:.3f} s'.format(T2-T0))
+
+def wannier(argv):
+    pass
+    usage = 'wanpy ' + __version__ + \
+            'wanpy wannier [-h] [-e fermi_level] [-v] [-s]\n\n' + \
+            'wanpy.interface.buildwannier.WannierInterpolation:\n' + \
+            WannierInterpolation.__doc__
+    if os.path.exists('vasprun.xml'):
+        fermi_vasprun = float(re.findall('.\d+.\d+', os.popen('grep efermi vasprun.xml').readline())[0])
+        print('fermi level is {} readed from vasprun.xml'.format(fermi_vasprun))
+    else:
+        fermi_vasprun = 0.0
+
+    parser = OptionParser(usage)
+    parser.add_option("-e", "--efermi", action="store", type="float", dest="fermi", default=fermi_vasprun,
+                      help='fermi level, default is extracted from vasprun.xml, or zero if there is no vasprun.xml')
+    parser.add_option("--seedname", action="store", type="str", dest="seedname", default='wannier90')
+    parser.add_option("-v", '--verbose', action="store_true", dest="verbose",
+                      help="be moderately verbose")
+    parser.add_option("-s", '--spin', action="store_true", dest="cal_spin",
+                      help="if interpolat spin operator, default is False")
+    parser.add_option('--spn', action="store_true", dest="write_spn",
+                      help="if write .spn file (formated), default is False")
+    parser.add_option('--dat', action="store_true", dest="write_dat",
+                      help="if write .dat file (formated), default is False")
+    parser.add_option('--decimal', action="store", type="int", dest="decimals", default=7,
+                      help="save .h5 with rounded double precision, default decimals is 7")
+
+    options, args = parser.parse_args(argv)
+
+    fermi = options.fermi
+    seedname = options.seedname
+    verbose = options.verbose
+    cal_spin = options.cal_spin
+    write_spn = options.write_spn
+    write_dat = options.write_dat
+    decimals = options.decimals
+    # storetype = options.storetype
+
+    if cal_spin:
+        print('WAVECAR will be used for interpolating spin operator.')
+
+    T0 = time.time()
+    wanrun = WannierInterpolation(fermi, verbose=verbose)
+    # wanrun.run(cal_r=True, cal_spin=cal_spin, write_htb=True, write_spn=write_spn)
+    wanrun.run(cal_r=True, cal_spin=cal_spin, write_h5=True, write_dat=write_dat,
+               write_spn=write_spn, hermite_r=True, decimals=decimals)
+    T1 = time.time()
+
+    print('Wannier interpolation completed, time consuming {:.3f} s'.format(T1-T0))
+
+def set_w90eig_fermi_eq_zero(argv):
+    usage = '''wanpy set_w90eig_fermi_eq_zero [-h] [-e fermi_level] [-f fname_of_w90amn]
+    
+Shift the Fermi level of wannier90.eig to zero. 
+The Fermi level is loaded from vasprun.xml if not specified, 
+and the resulting .eig will restored with name `wannier90.eig.zero`.
+    '''
+
+    fermi_vasp = float(re.findall('.\d+.\d+', os.popen('grep efermi vasprun.xml').readline())[0])
+
+    parser = OptionParser(usage)
+    parser.add_option("-e", "--efermi", action="store", type="float", dest="fermi", default=fermi_vasp)
+    parser.add_option("-f", "--fname", action="store", type="string", dest="fname", default='wannier90.eig')
+
+    options, args = parser.parse_args(argv)
+
+    fermi = options.fermi
+    fname = options.fname
+
+    savefname = r'wannier90.eig.zero'
+    with open('wannier90.amn', 'r') as f:
+        f.readline()
+        nb, nk, nw = np.array(f.readline().split(), dtype='int64')
+    # nb, nk, nw = read_par()
+    EIG = W90_eig(nb, nk)
+    EIG.load_from_w90(fname)
+    EIG.eig -= fermi
+    EIG.save_w90(savefname)
+
+    print('Fermi level have been set at 0 eV by adjusting')
+    print('E(wannier) = E(DFT) - ({}) eV'.format(fermi))
+
+def main():
+    usage = "usage: wanpy [-h] [-V] command ..."
+    job_list = ['-h', '-V',
+                'htb',
+                'wannier',
+                'set_w90eig_fermi_eq_zero',
+                'test']
+    # print(job_list)
+
+    if len(sys.argv) == 1:
+        print(usage)
+        exit()
+
+    job = sys.argv[1]
+    argv = sys.argv[2:]
+
+    if job not in job_list:
+        raise CommandNotFoundError('wanpy {}'.format(job))
+
+    if job == '-h':
+        print(usage)
+        exit()
+
+    if job == '-V':
+        print('wanpy {}'.format(__version__))
+        exit()
+
+    if job == 'htb':
+        h5htb(argv)
+    elif job == 'wannier':
+        wannier(argv)
+    elif job == 'set_w90eig_fermi_eq_zero':
+        set_w90eig_fermi_eq_zero(argv)
+
+
+if __name__ == '__main__':
+    work_dir = os.getcwd()
+    os.chdir(work_dir)
+    main()
