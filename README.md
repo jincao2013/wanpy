@@ -21,7 +21,7 @@ For personal computer:
 ```bash
 export PYTHONPATH="path_of_wanpy:$PYTHONPATH"
 export PATH="path_of_wanpy/scripts:$PATH"
-export WANPY_ROOT_DIR="/Volumes/jindedata/scidata"
+export WANPY_ROOT_DIR="your_work_dir"
 export PYGUI="True"
 ```
 
