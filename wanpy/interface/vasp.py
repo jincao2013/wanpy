@@ -18,8 +18,13 @@ sys.path.append(os.environ.get('PYTHONPATH'))
 
 import numpy as np
 import numpy.linalg as LA
-from pymatgen.io.vasp.outputs import Wavecar
 from wanpy.core.toolkits import kmold
+try:
+    from pymatgen.io.vasp.outputs import Wavecar
+except ModuleNotFoundError:
+    pass
+else:
+    pass
 
 
 class VASP(object):

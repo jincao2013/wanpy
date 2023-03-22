@@ -22,7 +22,7 @@ from scipy import special
   * Fermi-Dirac distribution
 '''
 def FD(e, T=None, fermi=0):
-    if T is None:
+    if T is None or T<1e-3:
         return fermi_dirac_dis_0T(e, fermi)
     else:
         return fermi_dirac_dis_finit_T(e, T, fermi=0.0)

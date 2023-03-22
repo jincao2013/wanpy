@@ -30,7 +30,9 @@ from wanpy.core.bz import get_adaptive_ewide_II_slab, get_adaptive_ewide_III_sla
 from wanpy.core.bz import FD_zero, FD, MPgauss, gauss, lorentz
 from wanpy.core.units import *
 
-
+'''
+  * unit 
+'''
 class Res_dim_coeff(Enum):
     dos = 1.0
     jdos = 1.0
@@ -60,7 +62,7 @@ class Res_unit(Enum):
     
 
 '''
-  * FFT
+  * basic functions on htb
 '''
 def get_fft001(htb, k, sym_h=True, sym_r=True, imaxgap='null', maxgap=-1.0):
     # maxgap determine if reture zero response
@@ -209,7 +211,7 @@ def get_fft_withzeeman(htb, k, B, sym_h=True, sym_r=True):
     return v, vw, E, U, hk, hkk, Awk
 
 '''
-  * Calculators for band structure
+  * band structure calculators 
 '''
 def get_hk(htb, k, tbgauge=False, use_ws_distance=False):
     eikr = np.exp(2j * np.pi * np.einsum('a,Ra', k, htb.R_hr)) / htb.ndegen
@@ -347,7 +349,7 @@ def cal_berry_curvature_HSP(htb, HSP_list, nk1=101, HSP_name=None, ewide=0.01):
 '''
   * Calculators for resonse functions 
 '''
-def cal_DOS(htb, k, ee, ewide=0.005, ewide_min=0.005):
+def cal_dos(htb, k, ee, ewide=0.005, ewide_min=0.005):
     v, vw, E, U, hk, hkk, Awk = get_fft001(htb, k)
 
     W = get_adaptive_ewide_II(v, htb.dk, ewide_min=ewide_min)
@@ -361,7 +363,7 @@ def cal_DOS(htb, k, ee, ewide=0.005, ewide_min=0.005):
     return dos, dos_ad
 
 
-def cal_JDOS(htb, k, ee, ewide=0.005, ewide_min=0.005, isADwide=True):
+def cal_jdos(htb, k, ee, ewide=0.005, ewide_min=0.005, isADwide=True):
     v, vw, E, U, hk, hkk, Awk = get_fft001(htb, k)
 
     e1, e2 = np.meshgrid(E, E)
@@ -376,57 +378,222 @@ def cal_JDOS(htb, k, ee, ewide=0.005, ewide_min=0.005, isADwide=True):
 
     return jdos
 
+'''
+  * dielectric functions 
+    Updated: Feb. 10, 2022
+'''
+def cal_static_polarization_function(htb, k, qq, gate, ewide, selec_band=...):
+    nq = qq.shape[0]
+    nw = htb.nw
+    nws = nw if selec_band is Ellipsis else selec_band.shape[0]
 
-def cal_dielectric_RPA(htb, k, ee, rank2Index, ewide=0.005):
-    a, b = rank2Index
-    v, vw, E, U, hk, hkk, Awk = get_fft001(htb, k)
-    vv = np.real(np.array([np.diag(v[0]), np.diag(v[1]), np.diag(v[2])]))
+    hk = get_hk(htb, k, tbgauge=False)
+    E0, U0 = LA.eigh(hk)
+    E0 = E0[selec_band] - htb.fermi
+    f0 = FD_zero(E0 - gate)
+    U0 = U0[:, selec_band]
 
-    e1, e2 = np.meshgrid(E, E)
-    invE = np.real(1 / (e2 - e1 - 1j * ewide))
-    invE = invE - np.diag(np.diag(invE))
+    U = np.zeros([nq, nw, nws], dtype='complex128')
+    E = np.zeros([nq, nws], dtype='float64')
+    for i in range(nq):
+        hk = get_hk(htb, k + qq[i], tbgauge=False)
+        _E, _U = LA.eigh(hk)
+        E[i] = _E[selec_band]
+        U[i] = _U[:, selec_band]
+        # E[i], U[i] = LA.eigh(hk)
+    E = E - htb.fermi
+    f = FD_zero(E - gate)
+    fq = np.einsum('qnm->qmn', np.full((nq, nws, nws), f0)) - \
+         np.einsum('mqn->qmn', np.full((nws, nq, nws), f))
+    invEq = 1 / (
+            np.einsum('qnm->qmn', np.full((nq, nws, nws), E0)) -
+            np.einsum('mqn->qmn', np.full((nws, nq, nws), E)) +
+            1j * ewide
+    )
+    invEq = np.real(invEq)
+    eiqr = np.exp(-2j * np.pi * np.einsum('qa,na->qn', qq, htb.wccf))
+    Mmn = np.einsum('mj,qj,qjn->qmn', U0.T.conj(), eiqr, U, optimize=True)
+    # Mmn = np.einsum('mj,qjn->qmn', U0.T.conj(), U, optimize=True)
+    chi0 = np.einsum('qmn,qmn,qmn->q', fq, invEq, np.abs(Mmn) ** 2, optimize=True)
+    return chi0
 
-    npmesh = np.meshgrid(E, E, ee)
-    invEe = 1 / (npmesh[1] - npmesh[0] - npmesh[2] - 1j * ewide) + \
-            1 / (npmesh[1] - npmesh[0] + npmesh[2] + 1j * ewide)
+def cal_dielectric_function(htb, ee, k, qq, gate, ewide, man=False, selec_band=...):
+    """
+      dev note.
+      * I have tested that using tbgauge without eiqr, and using wannier
+        gauge with eiqr, both give the same results, but the later one is about
+        1.5 times faster.
+    """
+    ne = ee.shape[0]
+    nq = qq.shape[0]
+    nw = htb.nw
+    nws = nw if selec_band is Ellipsis else selec_band.shape[0]
 
-    ee2 = 1 / (ee + 1j * ewide) + \
-          1 / (ee - 1j * ewide)
+    hk = get_hk(htb, k, tbgauge=False)
+    E0, U0 = LA.eigh(hk)
+    E0 = E0[selec_band] - htb.fermi
+    f0 = FD_zero(E0 - gate)
+    U0 = U0[:, selec_band]
 
-    f = FD_zero(e2) - FD_zero(e1)
-    pf = -np.exp(-0.5 * ((E - htb.fermi) / ewide) ** 2) / np.sqrt(2 * np.pi) / ewide
+    U = np.zeros([nq, nw, nws], dtype='complex128')
+    E = np.zeros([nq, nws], dtype='float64')
+    chi0 = np.zeros([nq, ne], dtype='complex128')
+    for i in range(nq):
+        hk = get_hk(htb, k + qq[i], tbgauge=False)
+        _E, _U = LA.eigh(hk)
+        E[i] = _E[selec_band]
+        U[i] = _U[:, selec_band]
+        # E[i], U[i] = LA.eigh(hk)
+    E = E - htb.fermi
+    f = FD_zero(E - gate)
+    fq = np.einsum('qnm->qmn', np.full((nq, nws, nws), f0)) - \
+         np.einsum('mqn->qmn', np.full((nws, nq, nws), f))
+    invEqe = 1 / (
+            np.einsum('qenm->qmne', np.full((nq, ne, nws, nws), E0)) -
+            np.einsum('emqn->qmne', np.full((ne, nws, nq, nws), E)) +
+            np.einsum('qmne->qmne', np.full((nq, nws, nws, ne), ee)) +
+            1j * ewide
+    )
+    eiqr = np.exp(-2j * np.pi * np.einsum('qa,na->qn', qq, htb.wccf))
+    Mmn = np.einsum('mj,qj,qjn->qmn', U0.T.conj(), eiqr, U, optimize=True)
+    # Mmn = np.einsum('mj,qjn->qmn', U0.T.conj(), U, optimize=True)
+    if man:
+        chi0_man = np.einsum('qmn,qmne,qmn->qemn', fq, invEqe, np.abs(Mmn) ** 2, optimize=True)
+        chi0_intra = np.einsum('qemn,mn->qe', chi0_man, np.eye(nws), optimize=True)
+        chi0_inter = np.einsum('qemn,mn->qe', chi0_man, 1-np.eye(nws), optimize=True)
+        chi0 = np.array([chi0_intra+chi0_inter, chi0_intra, chi0_inter])
+    else:
+        chi0 = np.einsum('qmn,qmne,qmn->qe', fq, invEqe, np.abs(Mmn) ** 2, optimize=True)
+    return chi0
 
-    D1 = np.einsum('mn,mn,nm,mn,mna', f, v[a], v[b], invE ** 2, invEe, optimize=True)
-    D2 = np.einsum('n,n,n', pf, vv[a], vv[b], optimize=True) * ee2
-    D = D1 + D2
-    Dr = np.real(D)
-    Di = np.imag(D)
-    return Dr, Di  # -> [ne], [ne]
+def cal_dielectric_function_manyEf(htb, ee, k, qq, gate, ewide, man=False, selec_band=...):
+    """
+      dev note.
+      * see note of cal_dielectric_function
+    """
+    ne = ee.shape[0]
+    nq = qq.shape[0]
+    nw = htb.nw
+    nws = nw if selec_band is Ellipsis else selec_band.shape[0]
+    ngate = gate.shape[0]
+
+    hk = get_hk(htb, k, tbgauge=False)
+    E0, U0 = LA.eigh(hk)
+    E0 = E0[selec_band] - htb.fermi
+    U0 = U0[:, selec_band]
+    f0 = np.zeros([ngate, nws], dtype='float64')  # fm(k) -> gm
+    for i in range(ngate):
+        f0[i] = FD_zero(E0 - gate[i])
+
+    U = np.zeros([nq, nw, nws], dtype='complex128')
+    E = np.zeros([nq, nws], dtype='float64')
+    chi0 = np.zeros([nq, ne], dtype='complex128')
+    for i in range(nq):
+        hk = get_hk(htb, k + qq[i], tbgauge=False)
+        _E, _U = LA.eigh(hk)
+        E[i] = _E[selec_band]
+        U[i] = _U[:, selec_band]
+        # E[i], U[i] = LA.eigh(hk)
+    E = E - htb.fermi
+
+    f = np.zeros([ngate, nq, nws], dtype='float64')  # fn(k+q) -> gqn
+    for i in range(ngate):
+        f[i] = FD_zero(E - gate[i])
+
+    fq = np.einsum('qngm->gqmn', np.full((nq, nws, ngate, nws), f0)) - \
+         np.einsum('mgqn->gqmn', np.full((nws, ngate, nq, nws), f))
+    fq = np.ascontiguousarray(fq)
+    invEqe = 1 / (
+            np.einsum('qenm->qmne', np.full((nq, ne, nws, nws), E0)) -
+            np.einsum('emqn->qmne', np.full((ne, nws, nq, nws), E)) +
+            np.einsum('qmne->qmne', np.full((nq, nws, nws, ne), ee)) +
+            1j * ewide
+    )
+    eiqr = np.exp(-2j * np.pi * np.einsum('qa,na->qn', qq, htb.wccf))
+    Mmn = np.einsum('mj,qj,qjn->qmn', U0.T.conj(), eiqr, U, optimize=True)
+    # Mmn = np.einsum('mj,qjn->qmn', U0.T.conj(), U, optimize=True)
+    if man:
+        chi0_man = np.einsum('gqmn,qmne,qmn->gqemn', fq, invEqe, np.abs(Mmn) ** 2, optimize=True)
+        chi0_intra = np.einsum('qemn,mn->qe', chi0_man, np.eye(nws), optimize=True)
+        chi0_inter = np.einsum('qemn,mn->qe', chi0_man, 1-np.eye(nws), optimize=True)
+        chi0 = np.array([chi0_intra+chi0_inter, chi0_intra, chi0_inter])
+    else:
+        chi0 = np.einsum('gqmn,qmne,qmn->gqe', fq, invEqe, np.abs(Mmn) ** 2, optimize=True)
+    return chi0
+
+def get_epsilon_rpa(qc, chi0, background_epsilon=1, dim=2):
+    qcnorm = LA.norm(qc, axis=1)
+    invqc = np.real(1 / (qcnorm + 1j * 1e-50))
+
+    if dim == 2:
+        # dim_coeff = EV / (4*np.pi*Epsilon0) * 1e10  # in IS
+        dim_coeff = Bohr * Hartree  # in a.u., the two should be the same due to the dimonsionless
+        vq = 2 * np.pi * invqc / background_epsilon
+    elif dim == 3:
+        dim_coeff = Bohr * Hartree
+        vq = 4 * np.pi * invqc ** 2 / background_epsilon
+    else:
+        dim_coeff = None
+        vq = None
+
+    epsilon_rpa = 1 - dim_coeff * np.einsum('q,...qe->...qe', vq, chi0)
+    loss = -1 * np.imag(1 / epsilon_rpa)
+    return qcnorm, epsilon_rpa, loss
+
+def get_vqchi0(qc, chi0, background_epsilon=1, dim=2):
+    qcnorm = LA.norm(qc, axis=1)
+    invqc = np.real(1 / (qcnorm + 1j * 1e-50))
+
+    if dim == 2:
+        # dim_coeff = EV / (4*np.pi*Epsilon0) * 1e10  # in IS
+        dim_coeff = Bohr * Hartree  # in a.u., the two should be the same due to the dimonsionless
+        vq = 2 * np.pi * invqc / background_epsilon
+    elif dim == 3:
+        dim_coeff = Bohr * Hartree
+        vq = 4 * np.pi * invqc ** 2 / background_epsilon
+    else:
+        dim_coeff = None
+        vq = None
+
+    vqchi0 = dim_coeff * np.einsum('q,q...->q...', vq, chi0)
+    return qcnorm, vqchi0
 
 
 '''
   * Shift current
 '''
-def cal_shift_current_2D(htb, k, ee, gate, rank3Index, ewide=0.005, ewide_min=0.005, isADwide=True):
-    return cal_shift_current_Rshift(htb, k, ee, gate, rank3Index, ewide, ewide_min, isADwide)
+# def cal_shift_current_2D(htb, k, ee, gate, rank3Index, ewide=0.005, ewide_min=0.005, isADwide=True):
+#     return cal_shift_current_Rshift(htb, k, ee, gate, rank3Index, ewide, ewide_min, isADwide)
+#
+#
+# def cal_shift_current_3D(htb, k, ee, gate, rank3Index, ewide=0.005, ewide_min=0.005, isADwide=True):
+#     return cal_shift_current_Rshift(htb, k, ee, gate, rank3Index, ewide, ewide_min, isADwide)
 
+def cal_shift_current_Rshift_abc(htb, k, ee, rank3Index, ewide, ewide_min, isADwide=True, include_w=True):
+    def _get_w_ab(a, b, htb, hk, hkk, vw, U, Awk, eikr_hr, eikr_r):
+        hkkk_ab = -np.einsum('R,R,R,Rmn->mn', htb.Rc_hr.T[a], htb.Rc_hr.T[b], eikr_hr, htb.hr_Rmn, optimize=True)
+        Awkk_ab = 1j * np.einsum('R,R,Rmn->mn', htb.Rc_r.T[a], eikr_r, htb.r_Ramn[:, b, :, :], optimize=True)
+        ww_ab = hkkk_ab + 1j * (commdot(hkk[a], Awk[b]) + commdot(hk, Awkk_ab) + commdot(vw[b], Awk[a]))
+        w_ab = U.conj().T @ ww_ab @ U
+        w_ab = w_ab - np.diag(w_ab)
+        return w_ab
 
-def cal_shift_current_3D(htb, k, ee, gate, rank3Index, ewide=0.005, ewide_min=0.005, isADwide=True):
-    return cal_shift_current_Rshift(htb, k, ee, gate, rank3Index, ewide, ewide_min, isADwide)
+    def _get_rba(a, b, invE, v, vv, w_ab):
+        rba = 1j * invE * (
+                invE * v[b] * vv[a] +
+                np.einsum('nl,lm,lm->nm', v[b], v[a], invE, optimize=True) -
+                np.einsum('lm,nl,nl->nm', v[b], v[a], invE, optimize=True) -
+                w_ab
+        )
+        return rba
 
-
-def cal_shift_current_Rshift(htb, k, ee, gate, rank3Index, ewide=0.005, ewide_min=0.005, isADwide=True):
-    a, b, c = rank3Index
-    ngate = gate.shape[0]
-    ne = ee.shape[0]
+    a, b, c = rank3Index  # (1, 1, 1)
 
     eikr_hr = np.exp(2j * np.pi * np.einsum('a,ia', k, htb.R_hr))
     eikr_r = np.exp(2j * np.pi * np.einsum('a,ia', k, htb.R_r))
     hk = np.einsum('R,Rmn->mn', eikr_hr, htb.hr_Rmn, optimize=True)
     hkk = 1j * np.einsum('Ra,R,Rmn->amn', htb.Rc_hr, eikr_hr, htb.hr_Rmn, optimize=True)
-    hkkk_ab = -np.einsum('R,R,R,Rmn->mn', htb.Rc_hr.T[a], htb.Rc_hr.T[b], eikr_hr, htb.hr_Rmn, optimize=True)
     Awk = np.einsum('R,Ramn->amn', eikr_r, htb.r_Ramn, optimize=True)
-    Awkk_ab = 1j * np.einsum('R,R,Rmn->mn', htb.Rc_r.T[a], eikr_r, htb.r_Ramn[:, b, :, :], optimize=True)
 
     E, U = LA.eigh(hk)
     E = E - htb.fermi
@@ -434,17 +601,20 @@ def cal_shift_current_Rshift(htb, k, ee, gate, rank3Index, ewide=0.005, ewide_mi
     e1, e2 = np.meshgrid(E, E)
     invE = np.real(1 / (e2 - e1 - 1j * ewide))
     invE = invE - np.diag(np.diag(invE))
-    # f = FD_zero(e2) - FD_zero(e1)
 
     vw = hkk + 1j * (
-            np.einsum('lm,amn->aln', hk, Awk, optimize=True) - np.einsum('alm,mn->aln', Awk, hk, optimize=True))
-    ww_ab = hkkk_ab + \
-            1j * (LA.multi_dot([hkk[a], Awk[b]]) - LA.multi_dot([Awk[b], hkk[a]])) + \
-            1j * (LA.multi_dot([hk, Awkk_ab]) - LA.multi_dot([Awkk_ab, hk])) + \
-            1j * (LA.multi_dot([vw[b], Awk[a]]) - LA.multi_dot([Awk[a], vw[b]]))
+                np.einsum('lm,amn->aln', hk, Awk, optimize=True) - np.einsum('alm,mn->aln', Awk, hk, optimize=True))
     v = np.einsum('mi,aij,jn->amn', U.conj().T, vw, U, optimize=True)
-    w_ab = LA.multi_dot([U.conj().T, ww_ab, U])
-    # w_ab = 0
+
+    if include_w:
+        w_ab = _get_w_ab(a, b, htb, hk, hkk, vw, U, Awk, eikr_hr, eikr_r)
+        if b != c:
+            w_ac = _get_w_ab(a, c, htb, hk, hkk, vw, U, Awk, eikr_hr, eikr_r)
+        else:
+            w_ac = w_ab
+    else:
+        w_ab = 0
+        w_ac = 0
 
     vv = np.zeros_like(v)
     for i in range(3):
@@ -453,33 +623,120 @@ def cal_shift_current_Rshift(htb, k, ee, gate, rank3Index, ewide=0.005, ewide_mi
         vv[i] = _vv[1] - _vv[0]
 
     r = -1j * np.einsum('amn,mn->amn', v, invE)
-    rba = 1j * invE * (
-            invE * v[b] * vv[a] +
-            np.einsum('nl,lm,lm->nm', v[b], v[a], invE, optimize=True) -
-            np.einsum('lm,nl,nl->nm', v[b], v[a], invE, optimize=True) -
-            w_ab
-    )
+    rba = _get_rba(a, b, invE, v, vv, w_ab)
+    if b != c:
+        rca = _get_rba(a, b, invE, v, vv, w_ac)
+    else:
+        rca = rba
 
     if isADwide:
         delta = adapted_gauss_Delta_func(E, ee, v, htb.dk, ewide_min=ewide_min) + \
                 adapted_gauss_Delta_func(E, -ee, v, htb.dk, ewide_min=ewide_min)
     else:
-        delta = gauss_Delta_func(E, ee, ewide) + gauss_Delta_func(E, -ee, ewide)
+        delta = gauss_Delta_func(E, ee, ewide) + \
+                gauss_Delta_func(E, -ee, ewide)
 
-    f = np.zeros([ngate, htb.nw, htb.nw], dtype='float64')
-    for i in range(ngate):
-        f[i] = FD_zero(e2 - gate[i]) - FD_zero(e1 - gate[i])
+    f = FD_zero(e2) - FD_zero(e1)
 
-    sc = np.zeros([ngate, ne], dtype='float64')
-    sc = np.pi * np.imag(np.einsum('gnm,mn,nm,mne->ge', f, r[b], rba, delta, optimize=True))
+    # sc = -np.pi * np.imag(np.einsum('nm,mn,nm,mne->e', f, r[b], rba, delta, optimize=True))
 
-    # sc = np.zeros([ngate, ne], dtype='float64')
-    # for i in range(ngate):
-    #     f = FD_zero(e2 - gate[i]) - FD_zero(e1 - gate[i])
-    #     sc[i] = np.pi * np.imag(np.einsum('nm,mn,nm,mna', f, r[b], rba, delta, optimize=True))
+    sc = np.einsum('nm,mn,nm,mne->e', f, r[b], rca, delta, optimize=True) + \
+         np.einsum('nm,mn,nm,mne->e', f, r[c], rba, delta, optimize=True)
+    sc = np.pi * np.real(1j * 0.5 * sc)
+
+    return sc  # -> [ne]
+
+def cal_shift_current_Rshift_all(htb, k, ee, ewide, ewide_min, isADwide=True, include_w=True):
+    index2 = np.array([
+        [0, 0],
+        [1, 1],
+        [2, 2],
+        [0, 1],
+        [0, 2],
+        [1, 2],
+    ])
+
+    '''
+      * F.T.
+    '''
+    eikr_hr = np.exp(2j * np.pi * np.einsum('a,ia', k, htb.R_hr))
+    eikr_r = np.exp(2j * np.pi * np.einsum('a,ia', k, htb.R_r))
+    hk = np.einsum('R,Rmn->mn', eikr_hr, htb.hr_Rmn, optimize=True)
+    hkk = 1j * np.einsum('Ra,R,Rmn->amn', htb.Rc_hr, eikr_hr, htb.hr_Rmn, optimize=True)
+    Awk = np.einsum('R,Ramn->amn', eikr_r, htb.r_Ramn, optimize=True)
+
+    E, U = LA.eigh(hk)
+    E = E - htb.fermi
+
+    e1, e2 = np.meshgrid(E, E)
+    invE = np.real(1 / (e2 - e1 - 1j * ewide))
+    invE = invE - np.diag(np.diag(invE))
+
+    vw = hkk + 1j * (np.einsum('lm,amn->aln', hk, Awk, optimize=True) - np.einsum('alm,mn->aln', Awk, hk, optimize=True))
+    v = np.einsum('mi,aij,jn->amn', U.conj().T, vw, U, optimize=True)
+
+    if include_w:
+        hkkk = np.zeros([6, htb.nw, htb.nw], dtype='complex128')
+        Awkk = np.zeros([6, htb.nw, htb.nw], dtype='complex128')
+        ww = np.zeros([6, htb.nw, htb.nw], dtype='complex128')
+
+        i = 0
+        for a, b in index2:
+            hkkk[i] = -np.einsum('R,R,R,Rmn->mn', htb.Rc_hr.T[a], htb.Rc_hr.T[b], eikr_hr, htb.hr_Rmn, optimize=True)
+            Awkk[i] = 1j * np.einsum('R,R,Rmn->mn', htb.Rc_r.T[a], eikr_r, htb.r_Ramn[:, b, :, :], optimize=True)
+            ww[i] = hkkk[i] + 1j * (commdot(hkk[a], Awk[b]) + commdot(hk, Awkk[i]) + commdot(vw[b], Awk[a]))
+            i += 1
+
+        w = np.zeros([3, 3, htb.nw, htb.nw], dtype='complex128')
+
+        i = 0
+        for a, b in index2:
+            wi = U.conj().T @ ww[i] @ U
+            w[a, b] = wi
+            if a != b:
+                w[b, a] = wi
+            i += 1
+    else:
+        w = np.zeros([3, 3, htb.nw, htb.nw], dtype='complex128')
+
+    delta_v = np.zeros_like(v)
+    for i in range(3):
+        _vv = np.diag(v[i])
+        _vv = np.meshgrid(_vv, _vv)
+        delta_v[i] = _vv[1] - _vv[0]
+
+    '''
+      * r, rba
+    '''
+    r = -1j * np.einsum('amn,mn->amn', v, invE)
+
+    rba = np.zeros([3, 3, htb.nw, htb.nw], dtype='complex128')
+    for a in range(3):
+        for b in range(3):
+            rba[a, b] = 1j * invE * (
+                    invE * v[b] * delta_v[a] +
+                    np.einsum('nl,lm,lm->nm', v[b], v[a], invE, optimize=True) -
+                    np.einsum('lm,nl,nl->nm', v[b], v[a], invE, optimize=True) -
+                    w[a, b]
+            )
+
+    if isADwide:
+        delta = adapted_gauss_Delta_func(E, ee, v, htb.dk, ewide_min=ewide_min) + \
+                adapted_gauss_Delta_func(E, -ee, v, htb.dk, ewide_min=ewide_min)
+    else:
+        delta = gauss_Delta_func(E, ee, ewide) + \
+                gauss_Delta_func(E, -ee, ewide)
+
+    f = FD_zero(e2) - FD_zero(e1)
+
+    sc = np.einsum('nm,cmn,abnm,mne->abce', f, r, rba, delta, optimize=True)
+    sc = np.pi * np.real(1j * 0.5 * (sc + np.einsum('abce->acbe', sc)))
+
+    # _sc = np.max(np.abs(sc))
+    # # if _sc > 0.1:
+    # print(_sc)
 
     return sc  # -> [ngate, ne]
-
 
 def cal_shift_current_Retarded(htb, k, ee, gate, rank3Index, ewide=0.005, ewide_min=0.005, isADwide=True):
     a, b, c = rank3Index
@@ -521,7 +778,6 @@ def cal_shift_current_Retarded(htb, k, ee, gate, rank3Index, ewide=0.005, ewide_
     # OR1_AD = -1 * np.einsum('ln,nl,ml,nla,lm,mn,nl', f, (invE.real) ** 2, invE_AD, invEe_AD, v[a], v[b], v[c], optimize=True).real
 
     return sc  # -> [ngate, ne]
-
 
 '''
   * LPGE
@@ -715,50 +971,49 @@ def cal_CPGE_Retarded(htb, k, ee, gate, rank3Index, ewide=0.005, ewide_min=0.005
 
 
 '''
-  * BC dipole
+  * Berry curvature dipole
 '''
-def cal_BC_dipole(htb, k, ee, gate, ewide=0.005):
-    eikr_hr = np.exp(2j * np.pi * np.einsum('a,ia', k, htb.R_hr))
-    eikr_r = np.exp(2j * np.pi * np.einsum('a,ia', k, htb.R_r))
-    hk = np.einsum('R,Rmn->mn', eikr_hr, htb.hr_Rmn, optimize=True)
-    hkk = 1j * np.einsum('Ra,R,Rmn->amn', htb.Rc_hr, eikr_hr, htb.hr_Rmn, optimize=True)
-    Awk = np.einsum('R,Ramn->amn', eikr_r, htb.r_Ramn, optimize=True)
+def cal_bc_dipole(htb, k, gate, temperature, ewide_berry=0.001):
+    ngate = gate.shape[0]
+    ntemperature = temperature.shape[0]
+    borden = Kb * temperature
+    # ewide should be seted as 0.1 times of the minimal energy difference, or using adapted smearing
+    v, vw, E, U, hk, hkk, Awk = get_fft001(htb, k, sym_h=True, sym_r=True)
 
-    E, U = LA.eigh(hk)
-    E = E - htb.fermi
-
-    vw = hkk + 1j * (
-            np.einsum('lm,amn->aln', hk, Awk, optimize=True) - np.einsum('alm,mn->aln', Awk, hk, optimize=True))
-    v = np.einsum('mi,aij,jn->amn', U.conj().T, vw, U, optimize=True)
-
-    # W = get_adaptive_ewide_II(v, dk, ewide_min=ewide_min)
     e1, e2 = np.meshgrid(E, E)
-    # invE = np.real(1 / (e2 - e1 - 1j * ewide))
-    invE = np.real(1 / (e2 - e1 - 0.001j))
+    invE = np.real(1 / (e2 - e1 - 1j * ewide_berry))
     invE = invE - np.diag(np.diag(invE))
+    invE2 = invE ** 2
 
-    vvx = np.real(np.diag(v[0]))
-    vvy = np.real(np.diag(v[1]))
+    # vv = np.zeros_like(v)
+    # for i in range(3):
+    #     _vv = np.diag(v[i])
+    #     _vv = np.meshgrid(_vv, _vv)
+    #     vv[i] = _vv[1] - _vv[0]
+    diagv = np.array([np.diag(v[0]), np.diag(v[1]), np.diag(v[2])]).real
 
-    r = -1j * np.einsum('amn,mn->amn', v, invE)
-    omegaz = 1j * (np.einsum('mn,nm->mn', r[0], r[1]) - np.einsum('mn,nm->mn', r[1], r[0]))
-    omegaz = np.real(np.einsum('mn->n', omegaz))
+    # bc = np.zeros([3, htb.nw], dtype='float64')
+    # bc[0] = np.einsum('mn,mn->n', -2. * np.imag(v[1].T * v[2]), invE2, optimize=True)
+    # bc[1] = np.einsum('mn,mn->n', -2. * np.imag(v[2].T * v[0]), invE2, optimize=True)
+    # bc[2] = np.einsum('mn,mn->n', -2. * np.imag(v[0].T * v[1]), invE2, optimize=True)
+    bcz = np.einsum('mn,mn->n', -2. * np.imag(v[0].T * v[1]), invE2, optimize=True)
 
-    # omegaz = -2. * np.imag(np.einsum('nm,mn,mn->n', v[0], v[1], invE ** 2, optimize=True))
+    pf = np.zeros([ngate, ntemperature, htb.nw], dtype='float64')
+    for i in range(ngate):
+        for j in range(ntemperature):
+            pf[i, j] = -np.exp(-0.5 * ((E - gate[i]) / borden[j]) ** 2) / np.sqrt(2 * np.pi) / borden[j]
+    dos = -1 * np.sum(pf, axis=2)
 
-    Eb = np.meshgrid(gate, E)
-    Eb = Eb[1] - Eb[0]
-    pf = -np.exp(-0.5 * (Eb / ewide) ** 2) / np.sqrt(2 * np.pi) / ewide
-    # pf = -1 * (np.exp(-0.5 * (Eb.T / W) ** 2) / np.sqrt(2 * np.pi) / ewide).T
+    dipole = np.einsum('an,n,gTn->agT', diagv, bcz, pf, optimize=True)
 
-    Dx = np.einsum('nf,n,n->f', pf, vvx, omegaz, optimize=True)
-    Dy = np.einsum('nf,n,n->f', pf, vvy, omegaz, optimize=True)
+    result = np.zeros([4, ngate, ntemperature], dtype='float64')
+    result[:3] = dipole
+    result[3] = dos
 
-    return Dx, Dy  # -> [ne], [ne]
-
+    return E, bcz, result
 
 '''
-  * SHG
+  * second harmonic generation
 '''
 def _get_rba(a, b, invE, v, vv, w_ab):
     rba = 1j * invE * (
@@ -880,6 +1135,73 @@ def cal_SHG_prb1998(htb, k, ee, rank3Index, gate, ewide=0.01, ewide_berry=0.001)
     chi = chi_inter + chi_mix
 
     return chi
+
+def cal_shg_nagaosa(htb, ee, k, gate, ewide, tensorIndex, adewide=False):
+    """
+    For details of the formula, see
+    [1]. PRB 94, 035117 (2016)
+    [2]. Sci. Adv., 2 (5), e1501524.
+    [3]. Nature Physics 13, 350–355 (2017)
+
+    Unit:
+    For 2D system, chi(3D) = chi(2D) / d(Angs).
+    For 3D system, using chi directly.
+    Then,
+    dim_coeff = EV / Epsilon0 * 1e12
+    dim_coeff * chi is in unit of [pm/V].
+    """
+    ngate = gate.shape[0]
+    a, b, c = tensorIndex
+
+    # kc = np.array([0.2, 0.1, 0.2])
+    # v, vw, E, U, hk, hkk, Awk = res.get_fft001(htb, k)
+    index = np.array([
+        [a, b]
+    ])
+    v, vw, w, ww, E, U = get_fft_d2(htb, k, index)
+    wwab = ww[0]
+
+    e1, e2 = np.meshgrid(E, E)
+    invE = np.real(1 / (e2 - e1 - 1j * 0.001))
+    invE = invE - np.diag(np.diag(invE))
+
+    f = np.zeros([ngate, htb.nw, htb.nw], dtype='float64')
+    for i in range(ngate):
+        f[i] = FD_zero(e2 - gate[i]) - FD_zero(e1 - gate[i])
+
+    v = np.einsum('mi,aij,jn->amn', U.conj().T, vw, U, optimize=True)
+    wab = np.einsum('mi,ij,jn->mn', U.conj().T, wwab, U, optimize=True)
+    # wzz = 0
+
+    vv = np.zeros_like(v)
+    for i in range(3):
+        _vv = np.diag(v[i])
+        _vv = np.meshgrid(_vv, _vv)
+        vv[i] = _vv[1] - _vv[0]
+
+    r = -1j * np.einsum('amn,mn->amn', v, invE)
+    rba = 1j * invE * (
+            invE * v[b] * vv[a] +
+            np.einsum('nl,lm,lm->nm', v[b], v[a], invE, optimize=True) -
+            np.einsum('lm,nl,nl->nm', v[b], v[a], invE, optimize=True) -
+            wab
+    )
+    Rab = np.imag(rba / (r[b] + 1e60 * np.eye(htb.nw)))
+
+    if adewide:
+        dk = htb.dk
+        delta = -1 * adapted_gauss_Delta_func(E, ee, v, dk, ewide_min=ewide) + \
+                0.5 * adapted_gauss_Delta_func(E, 2 * ee, v, dk, ewide_min=ewide)
+    else:
+        delta = -1 * gauss_Delta_func(E, ee, ewide) + 0.5 * gauss_Delta_func(E, 2*ee, ewide)
+
+    # shg = np.einsum('v,c,vc,vc,cve->e', f, 1-f, np.abs(v[b])**2, Rab, delta, optimize=True)
+    shg = np.einsum('gnm,nm,nm,mne->ge', f, Rab, np.abs(v[b])**2, delta, optimize=True)
+    # shg = np.einsum('v,c,vc,vc', f, 1-f, np.abs(v[2])**2, Rzz)
+
+    shg = 0.5 * np.pi * shg
+
+    return shg
 
 
 '''

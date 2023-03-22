@@ -1047,7 +1047,7 @@ class Htb(object):
             for i in range(nw):
                 inline = np.array(re.findall(r'.\d+\.\d+', f.readline()), dtype='float64')
                 wcc[i] = inline[:3]
-                wborden[i] = inline[-1]
+                # wborden[i] = inline[-1]
         f.close()
 
         wccf = LA.multi_dot([LA.inv(lattice), wcc.T]).T
