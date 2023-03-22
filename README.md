@@ -15,7 +15,17 @@ WanPy requires the following packages to be installed:
 conda create -n wanpy python=3.9 numpy scipy pandas matplotlib h5py mpi4py
 ````
 
-2. Setup environment variables: 
+2. Uncompress wanpy package in personal computer or clusters: 
+
+```bash
+tar zxvf wanpy.tar.gz
+```
+or
+```bash
+git clone https://github.com/jincao2013/wanpy.git
+```
+
+3. Setup environment variables: 
 
 For personal computer:
 ```bash
