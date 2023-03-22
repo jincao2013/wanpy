@@ -40,7 +40,7 @@ pyproject.toml
 doc/
 examples/
 test/
-projects/
+# projects/
 wanpy/del
 wanpy/dev
 wanpy/dfttools
