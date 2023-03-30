@@ -23,6 +23,7 @@ sys.path.append(os.environ.get('PYTHONPATH'))
 from enum import Enum, unique
 import numpy as np
 from numpy import linalg as LA
+from scipy.spatial import distance_matrix
 # from wanpy.core.units import *
 from wanpy.core.mesh import make_mesh
 
@@ -272,15 +273,15 @@ class Cell(object):
 
 class Worbi(object):
 
-    '''
+    """
       * Note
         The wannier90 interface v1.2 (interface with vasp) writes projections in this order:
-        for spins: for atoms: for atomic orbitals: ...
-        But for the interface v2.x and v3.x, it is
-        for atoms: for atomic orbitals: for spins: ...
-        We recommand to generat .nnkp from wannier90_v3.x,
+        {for spins: for atoms: for atomic orbitals: ...}
+        But in the interface v2.x and v3.x, it is
+        {for atoms: for atomic orbitals: for spins: ...}
+        We recommend generating .nnkp from wannier90_v3.x,
         and specify the interface version for Worbi.
-    '''
+    """
 
     def __init__(self):
         self._container = ['latt', 'lattG', 'nw',
@@ -582,8 +583,8 @@ class Htb(object):
     def load_htb(self, htb_fname=r'htb.h5'):
         self.load_h5(htb_fname)
 
-    def save_htb(self, htb_fname=r'htb.h5'):
-        self.save_h5(htb_fname)
+    def save_htb(self, *args, **kwargs):
+        self.save_h5(*args, **kwargs)
 
     # commented on Feb.16 2020
     # and to be removed later
@@ -1028,7 +1029,7 @@ class Htb(object):
 
         return r_Ramn
 
-    def _w90_load_wcc(self, fname, shiftincell=True):
+    def _w90_load_wcc(self, fname, shiftincell=False):
         lattice = np.zeros((3, 3), dtype='float64')
         with open(fname, 'r') as f:
             inline = f.readline()
