@@ -14,6 +14,13 @@ __date__ = "Otc. 21, 2020"
 '''
   * Wanpy build-in Exception
 '''
+class WanpyError(Exception):
+    def __init__(self, ErrorInfo):
+        super().__init__(self)
+        self.errorinfo="{}".format(ErrorInfo)
+    def __str__(self):
+        return self.errorinfo
+
 class WanpyInputError(Exception):
     def __init__(self, ErrorInfo):
         super().__init__(self)
