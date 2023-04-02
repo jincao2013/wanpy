@@ -583,8 +583,8 @@ class Htb(object):
     def load_htb(self, htb_fname=r'htb.h5'):
         self.load_h5(htb_fname)
 
-    def save_htb(self, *args, **kwargs):
-        self.save_h5(*args, **kwargs)
+    def save_htb(self, fname='htb.h5', decimals=16):
+        self.save_h5(fname=fname, decimals=decimals)
 
     # commented on Feb.16 2020
     # and to be removed later
@@ -776,7 +776,7 @@ class Htb(object):
         if self.D_iRmn is not None:
             self.save_D_dat()
 
-    def save_wannier90_hr_dat(self, seedname='wannier90'):
+    def save_wannier90_hr_dat(self, seedname='wannier90', fmt='12.6'):
         hr_fname = seedname + '_hr.dat'
 
         hr_Rmn = self.hr_Rmn
@@ -802,16 +802,22 @@ class Htb(object):
             for i, _R in zip(range(self.nR), self.R):
                 for wi in range(self.nw):
                     for wj in range(self.nw):
-                        f.write(
-                            '{: >5d}{: >5d}{: >5d}{: >5d}{: >5d}{: >12.6f}{: >12.6f}\n'.format(_R[0], _R[1], _R[2],
-                                                                                               wj + 1, wi + 1,
-                                                                                               hr_Rmn[i, wj, wi].real,
-                                                                                               hr_Rmn[i, wj, wi].imag,
-                                                                                               )
-                        )
+                        values = [hr_Rmn[i, wj, wi].real, hr_Rmn[i, wj, wi].imag]
+                        fmt_str = '{: >' + fmt + 'f}'
+                        formatted_values = [fmt_str.format(value) for value in values]
+                        formatted_values.insert(0, '{: >5d}{: >5d}'.format(wj + 1, wi + 1, ))
+                        formatted_values.insert(0, '{: >5d}{: >5d}{: >5d}'.format(_R[0], _R[1], _R[2]))
+                        f.write(''.join(formatted_values) + '\n')
+                        # f.write(
+                        #     '{: >5d}{: >5d}{: >5d}{: >5d}{: >5d}{: >12.6f}{: >12.6f}\n'.format(_R[0], _R[1], _R[2],
+                        #                                                                        wj + 1, wi + 1,
+                        #                                                                        hr_Rmn[i, wj, wi].real,
+                        #                                                                        hr_Rmn[i, wj, wi].imag,
+                        #                                                                        )
+                        # )
         f.close()
 
-    def save_wannier90_r_dat(self, seedname='wannier90'):
+    def save_wannier90_r_dat(self, seedname='wannier90', fmt=12.6):
         r_fname = seedname + '_r.dat'
         if os.path.exists(r_fname):
             os.remove(r_fname)
@@ -825,18 +831,28 @@ class Htb(object):
             for i, _R in zip(range(self.nR), self.R):
                 for wi in range(self.nw):
                     for wj in range(self.nw):
-                        f.write(
-                            '{: >5d}{: >5d}{: >5d}{: >5d}{: >5d}{: >12.6f}{: >12.6f}{: >12.6f}{: >12.6f}{: >12.6f}{: >12.6f}\n'.format(
-                                _R[0], _R[1], _R[2],
-                                wj + 1, wi + 1,
-                                r_Ramn[i, 0, wj, wi].real, r_Ramn[i, 0, wj, wi].imag,
-                                r_Ramn[i, 1, wj, wi].real, r_Ramn[i, 1, wj, wi].imag,
-                                r_Ramn[i, 2, wj, wi].real, r_Ramn[i, 2, wj, wi].imag,
-                                )
-                        )
+                        values = [
+                            r_Ramn[i, 0, wj, wi].real, r_Ramn[i, 0, wj, wi].imag,
+                            r_Ramn[i, 1, wj, wi].real, r_Ramn[i, 1, wj, wi].imag,
+                            r_Ramn[i, 2, wj, wi].real, r_Ramn[i, 2, wj, wi].imag,
+                        ]
+                        fmt_str = '{: >' + fmt + 'f}'
+                        formatted_values = [fmt_str.format(value) for value in values]
+                        formatted_values.insert(0, '{: >5d}{: >5d}'.format(wj + 1, wi + 1, ))
+                        formatted_values.insert(0, '{: >5d}{: >5d}{: >5d}'.format(_R[0], _R[1], _R[2]))
+                        f.write(''.join(formatted_values) + '\n')
+                        # f.write(
+                        #     '{: >5d}{: >5d}{: >5d}{: >5d}{: >5d}{: >12.6f}{: >12.6f}{: >12.6f}{: >12.6f}{: >12.6f}{: >12.6f}\n'.format(
+                        #         _R[0], _R[1], _R[2],
+                        #         wj + 1, wi + 1,
+                        #         r_Ramn[i, 0, wj, wi].real, r_Ramn[i, 0, wj, wi].imag,
+                        #         r_Ramn[i, 1, wj, wi].real, r_Ramn[i, 1, wj, wi].imag,
+                        #         r_Ramn[i, 2, wj, wi].real, r_Ramn[i, 2, wj, wi].imag,
+                        #         )
+                        # )
         f.close()
 
-    def save_wannier90_spin_dat(self, seedname='wannier90'):
+    def save_wannier90_spin_dat(self, seedname='wannier90', fmt='12.6'):
         fname = seedname + '_spin.dat'
         if os.path.exists(fname):
             os.remove(fname)
@@ -851,19 +867,30 @@ class Htb(object):
             for i, _R in zip(range(self.nR), self.R):
                 for wi in range(self.nw):
                     for wj in range(self.nw):
-                        f.write(
-                            '{: >5d}{: >5d}{: >5d}{: >5d}{: >5d}{: >12.6f}{: >12.6f}{: >12.6f}{: >12.6f}{: >12.6f}{: >12.6f}{: >12.6f}{: >12.6f}\n'.format(
-                                _R[0], _R[1], _R[2],
-                                wj + 1, wi + 1,
-                                spin0_Rmn[i, wj, wi].real, spin0_Rmn[i, wj, wi].imag,
-                                spin_Ramn[i, 0, wj, wi].real, spin_Ramn[i, 0, wj, wi].imag,
-                                spin_Ramn[i, 1, wj, wi].real, spin_Ramn[i, 1, wj, wi].imag,
-                                spin_Ramn[i, 2, wj, wi].real, spin_Ramn[i, 2, wj, wi].imag,
-                                )
-                        )
+                        values = [
+                            spin0_Rmn[i, wj, wi].real, spin0_Rmn[i, wj, wi].imag,
+                            spin_Ramn[i, 0, wj, wi].real, spin_Ramn[i, 0, wj, wi].imag,
+                            spin_Ramn[i, 1, wj, wi].real, spin_Ramn[i, 1, wj, wi].imag,
+                            spin_Ramn[i, 2, wj, wi].real, spin_Ramn[i, 2, wj, wi].imag,
+                        ]
+                        fmt_str = '{: >' + fmt + 'f}'
+                        formatted_values = [fmt_str.format(value) for value in values]
+                        formatted_values.insert(0, '{: >5d}{: >5d}'.format(wj + 1, wi + 1, ))
+                        formatted_values.insert(0, '{: >5d}{: >5d}{: >5d}'.format(_R[0], _R[1], _R[2]))
+                        f.write(''.join(formatted_values) + '\n')
+                        # f.write(
+                        #     '{: >5d}{: >5d}{: >5d}{: >5d}{: >5d}{: >12.6f}{: >12.6f}{: >12.6f}{: >12.6f}{: >12.6f}{: >12.6f}{: >12.6f}{: >12.6f}\n'.format(
+                        #         _R[0], _R[1], _R[2],
+                        #         wj + 1, wi + 1,
+                        #         spin0_Rmn[i, wj, wi].real, spin0_Rmn[i, wj, wi].imag,
+                        #         spin_Ramn[i, 0, wj, wi].real, spin_Ramn[i, 0, wj, wi].imag,
+                        #         spin_Ramn[i, 1, wj, wi].real, spin_Ramn[i, 1, wj, wi].imag,
+                        #         spin_Ramn[i, 2, wj, wi].real, spin_Ramn[i, 2, wj, wi].imag,
+                        #         )
+                        # )
         f.close()
 
-    def save_D_dat(self, seedname=r'wanpy_symmOP'):
+    def save_D_dat(self, seedname=r'wanpy_symmOP', fmt='12.6'):
         for _isymmOP in range(self.nD):
             fname = seedname + '_' + str(_isymmOP+1) + '.dat'
             symm_name = self.D_namelist[_isymmOP]
@@ -890,6 +917,12 @@ class Htb(object):
                 for i, _R in zip(range(self.nR), self.R):
                     for wi in range(self.nw):
                         for wj in range(self.nw):
+                            # values = [D_Rmn[i, wj, wi].real, D_Rmn[i, wj, wi].imag]
+                            # fmt_str = '{: >' + fmt + 'f}'
+                            # formatted_values = [fmt_str.format(value) for value in values]
+                            # formatted_values.insert(0, '{: >5d}{: >5d}'.format(wj + 1, wi + 1, ))
+                            # formatted_values.insert(0, '{: >5d}{: >5d}{: >5d}'.format(_R[0], _R[1], _R[2]))
+                            # f.write(''.join(formatted_values) + '\n')
                             f.write(
                                 '{: >5d}{: >5d}{: >5d}{: >5d}{: >5d}{: >12.6f}{: >12.6f}\n'.format(_R[0], _R[1], _R[2],
                                                                                                    wj + 1, wi + 1,
@@ -1179,8 +1212,8 @@ class Htb(object):
 
         nR_hr = R_hr.shape[0]
         nR_r = R_r.shape[0]
-        print('[reduce hr procedure] nR have reduced from {} to {}'.format(nR, nR_hr))
-        print('[reduce r procedure] nR have reduced from {} to {}'.format(nR, nR_r))
+        print('[hr reduction] nR has reduced from {} to {}'.format(nR, nR_hr))
+        print('[r reduction] nR has reduced from {} to {}'.format(nR, nR_r))
 
         return nR_hr, nR_r, R_hr, R_r, hr_Rmn, r_Ramn
 
@@ -1215,16 +1248,20 @@ class Htb(object):
         self.print_wcc()
         self.print_RGrid()
 
-    def print_RGrid(self):
+    def print_RGrid(self, gridR=None, ndegen=None):
+        if gridR is None:
+            gridR = self.R
+            ndegen = self.ndegen
+        nR = gridR.shape[0]
         print('  +-----------------------------------------------------------------------------+')
         print('  |                                     R Grid                                  |')
-        print('  |    number of R Grid = {:4}                                                  |'.format(self.nR))
+        print('  |    number of R Grid = {:4}                                                  |'.format(nR))
         print('  +-----------------------------------------------------------------------------+')
         for i in range(self.nR):
-            print('  |{: 4}). {: 3} {: 3} {: 3}  *{:2>} '.format(i + 1, self.R[i, 0], self.R[i, 1], self.R[i, 2], self.ndegen[i]), end='')
+            print('  |{: 4}). {: 3} {: 3} {: 3}  *{:2>} '.format(i + 1, gridR[i, 0], gridR[i, 1], gridR[i, 2], ndegen[i]), end='')
             if (i + 1) % 3 == 0:
                 print('  |')
-        if self.nR % 3 != 0: print('                                                      |')
+        if nR % 3 != 0: print('                                                      |')
         print('  +-----------------------------------------------------------------------------+')
         print('')
 

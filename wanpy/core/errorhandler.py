@@ -17,7 +17,7 @@ __date__ = "Otc. 21, 2020"
 class WanpyError(Exception):
     def __init__(self, ErrorInfo):
         super().__init__(self)
-        self.errorinfo="{}".format(ErrorInfo)
+        self.errorinfo="WanpyError: {}".format(ErrorInfo)
     def __str__(self):
         return self.errorinfo
 
