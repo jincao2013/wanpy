@@ -92,6 +92,7 @@ class Symmetrize_Htb(object):
     def run(self, tmin=1e-6):
         htb = self.htb
         symmops, atoms_pos, atoms_orbi, soc = self.symmops, self.atoms_pos, self.atoms_orbi, self.soc
+        htb.symmops = symmops
 
         # get h and r in meshk from original htb
         # print('[Symmetrize_Htb] calculating h and r in meshk from original htb ...')
@@ -345,11 +346,13 @@ class Symmetrize_Htb(object):
             ion_car_rot = (rot @ ion_car.T).T + tau_car
 
             ion_rot = (LA.inv(self.latt) @ ion_car_rot.T).T
-            ion_rot = np.remainder(ion_rot + 1e-10, 1.0)
+            ion_rot = np.remainder(ion_rot + 1e-5, 1.0)    # move ion at 1- to 0+
             ion_car_rot = (self.latt @ ion_rot.T).T
 
             dismat = distance_matrix(ion_car, ion_car_rot)
             rep_pos = np.array(dismat < 0.01, dtype='float')
+
+            assert LA.matrix_rank(rep_pos) == ion.shape[0] # check if a valid symmop
 
             # get op
             _corep.append(np.kron(rep_pos, rep_orbi))
@@ -491,25 +494,51 @@ def get_proj_info(htb):
 
     return atoms_pos, atoms_orbi
 
+def read_symmetry_inputfile(fname='symmetry.in'):
+    symmops = []
+    with open(fname, 'r') as f:
+        while True:
+            inline = f.readline().split('#')[0]
+
+            if not inline:
+                break
+
+            if 'ngridR' in inline:
+                ngridR = [int(i) for i in inline.split()[-3:]]
+
+            if 'symmops' in inline:
+                while '/' not in inline:
+                    inline = f.readline().split('#')[0]
+                    symmops_i = inline.split()
+                    if len(symmops_i) == 9:
+                        symmops_i = [float(i) for i in symmops_i]
+                        symmops_i[2] = symmops_i[2]/180 * np.pi
+                        symmops.append(symmops_i)
+    symmops = np.array(symmops)
+    f.close()
+    return ngridR, symmops
+
+
 if __name__ == "__main__":
     import os
     # from wanpy.core.plot import *
     # import matplotlib.pyplot as plt
     from wanpy.env import ROOT_WDIR, PYGUI
 
-    wdir = os.path.join(ROOT_WDIR, r'nonNeelSoT')
-    input_dir = os.path.join(ROOT_WDIR, r'nonNeelSoT/htblib')
+    wdir = os.path.join(ROOT_WDIR, r'symmtric_htb')
+    input_dir = os.path.join(ROOT_WDIR, r'symmtric_htb/htblib')
 
-    htb_fname = r'htb.MnPd.afm100.h5'
+    # htb_fname = r'htb.MnPd.afm100.h5'
     # htb_fname = r'htb.MnPt.afm100.h5'
+    htb_fname = r'htb.vs2vs.afmy.h5'
 
     os.chdir(input_dir)
     htb = Htb()
     htb.load_h5(htb_fname)
     os.chdir(wdir)
 
-    soc = True
-    ngridR = np.array([14, 14, 14])
+    # soc = True
+    # ngridR = np.array([14, 14, 14])
     # symmops = np.array([
     #     # TR, det, alpha, nx, ny, nz, taux, tauy, tauz
     #     [1, 1, 0, 0, 0, 1, 0, 0, 0], # e
@@ -530,31 +559,90 @@ if __name__ == "__main__":
     #     [-1, -1, np.pi, 0, 1, 0, 0, 0, 0], # myT
     #     [-1, -1, np.pi, 0, 0, 1, 0, 0, 0], # mzT
     # ])
+    # # symmops = np.array([
+    # #     # TR, det, alpha, nx, ny, nz, taux, tauy, tauz
+    # #     [1, 1, 0, 0, 0, 1, 0, 0, 0], # e
+    # #     [-1, -1, 0, 0, 0, 1, 0.5, 0.5, 0], # PT
+    # # ])
+    # # atoms_pos = [
+    # #     np.array([
+    # #         [0, 0, 0],
+    # #         [0.5, 0.5, 0],
+    # #     ]),
+    # #     np.array([
+    # #         [0.5, 0, 0.5],
+    # #         [0, 0.5, 0.5],
+    # #     ])
+    # # ]
+    # # atoms_orbi = [
+    # #     [0, 2],
+    # #     [0, 1, 2]
+    # # ]
+    # atoms_pos, atoms_orbi = get_proj_info(htb)
+    # symmhtb = Symmetrize_Htb(ngridR, htb, symmops, atoms_pos, atoms_orbi, soc)
+    # symmhtb.run()
+    # # htb.r_Ramn = None
+    # # htb.save_htb(r'htb.MnPd.afm100.symmpt.e6.h5', decimals=12)
+    # htb.save_htb(r'htb.MnPt.afm100.symm.h5')
+
+    ''' VS2VS '''
+    soc = True
+    ngridR = np.array([6, 16, 6])
     symmops = np.array([
         # TR, det, alpha, nx, ny, nz, taux, tauy, tauz
         [1, 1, 0, 0, 0, 1, 0, 0, 0], # e
-        [-1, -1, 0, 0, 0, 1, 0.5, 0.5, 0], # PT
+        [1, -1, 0, 0, 0, 1, 0, 0, 0], # P
+        [1, -1, np.pi, 0, 1, 0, 0, 0, 0], # My
+        [1, 1, np.pi, 0, 1, 0, 0, 0, 0], # C2y
+        # anti unitary
+        [-1, 1, 0, 0, 0, 1, 0.5, 0.5, 0], # ~T
+        [-1, -1, 0, 0, 0, 1, 0.5, 0.5, 0], # ~TP
+        [-1, -1, np.pi, 0, 1, 0, 0.5, 0.5, 0], # ~TMy
+        [-1, 1, np.pi, 0, 1, 0, 0.5, 0.5, 0], # ~TC2y
     ])
-    # atoms_pos = [
-    #     np.array([
-    #         [0, 0, 0],
-    #         [0.5, 0.5, 0],
-    #     ]),
-    #     np.array([
-    #         [0.5, 0, 0.5],
-    #         [0, 0.5, 0.5],
-    #     ])
-    # ]
-    # atoms_orbi = [
-    #     [0, 2],
-    #     [0, 1, 2]
-    # ]
-    atoms_pos, atoms_orbi = get_proj_info(htb)
+    atoms_pos = [
+        np.array([
+            [0.1552357247222010, 0.0000000000000000, 0.0059324618969288],
+            [0.0861959795410315, 0.0000000000000000, 0.3088876646940996],
+            [0.0705769787938255, 0.5000000000000000, 0.6792078946571625],
+            [0.9294230212061745, 0.5000000000000000, 0.3207921053428374],
+            [0.9138040204589686, 0.0000000000000000, 0.6911123353059004],
+            [0.8447642752777991, 0.0000000000000000, 0.9940675381030712],
+            [0.7390035718037002, 0.5000000000000000, 0.6598011335297749],
+            [0.7609964274058485, 0.0000000000000000, 0.3401988631552862],
+            [0.6552357206563747, 0.5000000000000000, 0.0059324567625196],
+            [0.5861959779801355, 0.5000000000000000, 0.3088876630709361],
+            [0.5705769793101882, 0.0000000000000000, 0.6792078957778224],
+            [0.4294230206898117, 0.0000000000000000, 0.3207921042221775],
+            [0.4138040220198645, 0.5000000000000000, 0.6911123369290638],
+            [0.3447642793436252, 0.5000000000000000, 0.9940675432374804],
+            [0.2390035725941515, 0.0000000000000000, 0.6598011368447139],
+            [0.2609964281963000, 0.5000000000000000, 0.3401988664702250],
+        ]),
+        np.array([
+            [0.7044177935899905, 0.0000000000000000, 0.8534962109885530],
+            [0.1511460161078381, 0.5000000000000000, 0.4847941460770144],
+            [0.0000000000000000, 0.0000000000000000, 0.5000000000000000],
+            [0.8488539838921618, 0.5000000000000000, 0.5152058539229856],
+            [0.7955822078552005, 0.5000000000000000, 0.1465037814517498],
+            [0.2044177921447997, 0.5000000000000000, 0.8534962185482500],
+            [0.6511460157838294, 0.0000000000000000, 0.4847941387978736],
+            [0.5000000000000000, 0.5000000000000000, 0.5000000000000000],
+            [0.3488539842161779, 0.0000000000000000, 0.5152058612021265],
+            [0.2955822064100094, 0.0000000000000000, 0.1465037890114469],
+        ])
+    ]
+    atoms_orbi = [
+        [1],
+        [2]
+    ]
+    # atoms_pos, atoms_orbi = get_proj_info(htb)
     symmhtb = Symmetrize_Htb(ngridR, htb, symmops, atoms_pos, atoms_orbi, soc)
     symmhtb.run()
     # htb.r_Ramn = None
-    # htb.save_htb(r'htb.MnPd.afm100.symmpt.e6.h5', decimals=12)
-    # htb.save_htb(r'htb.MnPt.afm100.symm.h5')
+    # htb.save_htb(r'htb.vs2vs.afmy.symm.h5')
+    # htb.save_wannier90_hr_dat(fmt='18.12')
+
 
 
 

@@ -23,7 +23,7 @@ sys.path.append(os.environ.get('PYTHONPATH'))
 from enum import Enum, unique
 import numpy as np
 from numpy import linalg as LA
-from scipy.spatial import distance_matrix
+# from scipy.spatial import distance_matrix
 # from wanpy.core.units import *
 from wanpy.core.mesh import make_mesh
 
@@ -469,7 +469,7 @@ class Htb(object):
         htb = Htb()
         htb.load_from_w90()
         htb.load_h5()
-        htb.load_from_wanpy_buildin_func(*, **)
+        htb.load(**kwargs)
     """
 
     def __init__(self, fermi=0.):
@@ -477,11 +477,12 @@ class Htb(object):
             'name', 'fermi', 'nw', 'nR', 'R', 'Rc', 'ndegen', 'N_ucell',
             'latt', 'lattG',
             'wcc', 'wccf',
-            'nD', 'D_namelist',
+            'symmops'
+            # 'nD', 'D_namelist',
         ]
         self._contents_large = ['hr_Rmn', 'r_Ramn',
                                 'spin0_Rmn', 'spin_Ramn',
-                                'D_iRmn',
+                                # 'D_iRmn',
                                 'wsvecT', 'invndegenT'
                                 ]
 
@@ -508,7 +509,10 @@ class Htb(object):
         self.spin0_Rmn = None
         self.spin_Ramn = None
 
-        # symmetric operators {D}
+        # symmetry - tb way
+        self.symmops = None
+
+        # symmetric operators {D} - wannier way
         self.nD = None
         self._D_namelist = None
         self.D_iRmn = None
@@ -524,13 +528,13 @@ class Htb(object):
         self._Rc_hr = None
         self._Rc_r = None
 
-    @property
-    def D_namelist(self):
-        return [i.decode('utf-8') for i in self._D_namelist]
-
-    @D_namelist.setter
-    def D_namelist(self, value):
-        self._D_namelist = [i if type(i) is bytes else i.encode('utf-8') for i in value]
+    # @property
+    # def D_namelist(self):
+    #     return [i.decode('utf-8') for i in self._D_namelist]
+    #
+    # @D_namelist.setter
+    # def D_namelist(self, value):
+    #     self._D_namelist = [i if type(i) is bytes else i.encode('utf-8') for i in value]
 
     @property
     def R_hr(self):
@@ -642,8 +646,10 @@ class Htb(object):
             hdf5_create_dataset(htb, 'wcc', data=self.wcc, dtype='float64')
             hdf5_create_dataset(htb, 'wccf', data=self.wccf, dtype='float64')
 
-            hdf5_create_dataset(htb, 'nD', data=self.nD, dtype='int64')
-            hdf5_create_dataset(htb, 'D_namelist', data=self._D_namelist, dtype=h5st)
+            hdf5_create_dataset(htb, 'symmops', data=self.symmops, dtype='float64')
+
+            # hdf5_create_dataset(htb, 'nD', data=self.nD, dtype='int64')
+            # hdf5_create_dataset(htb, 'D_namelist', data=self._D_namelist, dtype=h5st)
 
             hdf5_create_dataset(htb, 'wsvecT', data=self.wsvecT, dtype='int32', compression="gzip")
             hdf5_create_dataset_around(htb, 'invndegenT', data=self.invndegenT, dtype='float64', decimals=decimals, compression="gzip")
@@ -652,7 +658,7 @@ class Htb(object):
             hdf5_create_dataset_around(htb, 'r_Ramn', data=self.r_Ramn, dtype='complex128', decimals=decimals, compression="gzip")
             hdf5_create_dataset_around(htb, 'spin0_Rmn', data=self.spin0_Rmn, dtype='complex128', decimals=decimals, compression="gzip")
             hdf5_create_dataset_around(htb, 'spin_Ramn', data=self.spin_Ramn, dtype='complex128', decimals=decimals, compression="gzip")
-            hdf5_create_dataset_around(htb, 'D_iRmn', data=self.D_iRmn, dtype='complex128', decimals=decimals, compression="gzip")
+            # hdf5_create_dataset_around(htb, 'D_iRmn', data=self.D_iRmn, dtype='complex128', decimals=decimals, compression="gzip")
             f.close()
 
         self.cell.save_h5(fname)
@@ -665,33 +671,41 @@ class Htb(object):
             item = htb.get(i)
             if item is not None:
                 self.__dict__[i] = item[()]
-        if htb.get('D_namelist') is not None:                                       # WANNING!!!!!! Dec.2 2020
-            self.D_namelist = hdf5_read_dataset(htb, 'D_namelist', default=[])
+        # if htb.get('D_namelist') is not None:                                       # WANNING!!!!!! Dec.2 2020
+        #     self.D_namelist = hdf5_read_dataset(htb, 'D_namelist', default=[])
         f.close()
         self.cell.load_h5(fname)
         self.worbi.load_h5(fname)
 
-    def load_by_wanpy(self, name, cell, latt, lattG, wcc, fermi,
-                      nw, nR, ndegen, R, hr_Rmn,
-                      r_Ramn=None,
-                      spin0_Rmn=None, spin_Ramn=None,
-                      shiftincell=True
-                      ):
-        self.cell = cell
-        self.name = name
-        self.latt = latt
-        self.lattG = lattG
-        self.wcc = wcc
-        self.fermi = fermi
-        self.nw, self.nR, self.ndegen, self.R, self.hr_Rmn = nw, nR, ndegen, R, hr_Rmn
-        self.Rc = LA.multi_dot([latt, self.R.T]).T
-        self.r_Ramn = r_Ramn
-        self.spin0_Rmn, self.spin_Ramn = spin0_Rmn, spin_Ramn
+    def load(self, **kwargs):
+        for i in self._contents + self._contents_large:
+            item = kwargs.get(i)
+            if item is not None:
+                self.__dict__[i] = item
+        self.cell = kwargs.get('cell')
+        self.worbi = kwargs.get('worbi')
 
-        self.wccf = LA.multi_dot([LA.inv(latt), self.wcc.T]).T
-        if shiftincell:
-            self.wccf = np.remainder(self.wccf, np.array([1, 1, 1]))
-            self.wcc = LA.multi_dot([latt, self.wccf.T]).T
+    # def load(self, name, cell, latt, lattG, wcc, fermi,
+    #          nw, nR, ndegen, R, hr_Rmn,
+    #          r_Ramn=None,
+    #          spin0_Rmn=None, spin_Ramn=None,
+    #          shiftincell=True
+    #          ):
+    #     self.cell = cell
+    #     self.name = name
+    #     self.latt = latt
+    #     self.lattG = lattG
+    #     self.wcc = wcc
+    #     self.fermi = fermi
+    #     self.nw, self.nR, self.ndegen, self.R, self.hr_Rmn = nw, nR, ndegen, R, hr_Rmn
+    #     self.Rc = LA.multi_dot([latt, self.R.T]).T
+    #     self.r_Ramn = r_Ramn
+    #     self.spin0_Rmn, self.spin_Ramn = spin0_Rmn, spin_Ramn
+    #
+    #     self.wccf = LA.multi_dot([LA.inv(latt), self.wcc.T]).T
+    #     if shiftincell:
+    #         self.wccf = np.remainder(self.wccf, np.array([1, 1, 1]))
+    #         self.wcc = LA.multi_dot([latt, self.wccf.T]).T
 
     def load_wannier90_dat(self,
                            v1_w90interface,
@@ -773,8 +787,8 @@ class Htb(object):
         self.save_wannier90_hr_dat(seedname)
         self.save_wannier90_r_dat(seedname)
         self.save_wannier90_spin_dat(seedname)
-        if self.D_iRmn is not None:
-            self.save_D_dat()
+        # if self.D_iRmn is not None:
+        #     self.save_D_dat()
 
     def save_wannier90_hr_dat(self, seedname='wannier90', fmt='12.6'):
         hr_fname = seedname + '_hr.dat'
@@ -890,47 +904,47 @@ class Htb(object):
                         # )
         f.close()
 
-    def save_D_dat(self, seedname=r'wanpy_symmOP', fmt='12.6'):
-        for _isymmOP in range(self.nD):
-            fname = seedname + '_' + str(_isymmOP+1) + '.dat'
-            symm_name = self.D_namelist[_isymmOP]
-            D_Rmn = self.D_iRmn[_isymmOP]
-
-            if os.path.exists(fname):
-                os.remove(fname)
-
-            with open(fname, 'a') as f:
-                f.write('{} \n'.format(symm_name))
-                f.write('          {}\n'.format(self.nw))
-                f.write('          {}\n'.format(self.nR))
-
-                countor = 0
-                for i in range(self.nR):
-                    if countor == 15:
-                        countor = 0
-                        f.write(' \n')
-                    f.write('    ')
-                    f.write(str(self.ndegen[i]))
-                    countor += 1
-                f.write(' \n')
-
-                for i, _R in zip(range(self.nR), self.R):
-                    for wi in range(self.nw):
-                        for wj in range(self.nw):
-                            # values = [D_Rmn[i, wj, wi].real, D_Rmn[i, wj, wi].imag]
-                            # fmt_str = '{: >' + fmt + 'f}'
-                            # formatted_values = [fmt_str.format(value) for value in values]
-                            # formatted_values.insert(0, '{: >5d}{: >5d}'.format(wj + 1, wi + 1, ))
-                            # formatted_values.insert(0, '{: >5d}{: >5d}{: >5d}'.format(_R[0], _R[1], _R[2]))
-                            # f.write(''.join(formatted_values) + '\n')
-                            f.write(
-                                '{: >5d}{: >5d}{: >5d}{: >5d}{: >5d}{: >12.6f}{: >12.6f}\n'.format(_R[0], _R[1], _R[2],
-                                                                                                   wj + 1, wi + 1,
-                                                                                                   D_Rmn[i, wj, wi].real,
-                                                                                                   D_Rmn[i, wj, wi].imag,
-                                                                                                   )
-                            )
-            f.close()
+    # def save_D_dat(self, seedname=r'wanpy_symmOP', fmt='12.6'):
+    #     for _isymmOP in range(self.nD):
+    #         fname = seedname + '_' + str(_isymmOP+1) + '.dat'
+    #         symm_name = self.D_namelist[_isymmOP]
+    #         D_Rmn = self.D_iRmn[_isymmOP]
+    #
+    #         if os.path.exists(fname):
+    #             os.remove(fname)
+    #
+    #         with open(fname, 'a') as f:
+    #             f.write('{} \n'.format(symm_name))
+    #             f.write('          {}\n'.format(self.nw))
+    #             f.write('          {}\n'.format(self.nR))
+    #
+    #             countor = 0
+    #             for i in range(self.nR):
+    #                 if countor == 15:
+    #                     countor = 0
+    #                     f.write(' \n')
+    #                 f.write('    ')
+    #                 f.write(str(self.ndegen[i]))
+    #                 countor += 1
+    #             f.write(' \n')
+    #
+    #             for i, _R in zip(range(self.nR), self.R):
+    #                 for wi in range(self.nw):
+    #                     for wj in range(self.nw):
+    #                         # values = [D_Rmn[i, wj, wi].real, D_Rmn[i, wj, wi].imag]
+    #                         # fmt_str = '{: >' + fmt + 'f}'
+    #                         # formatted_values = [fmt_str.format(value) for value in values]
+    #                         # formatted_values.insert(0, '{: >5d}{: >5d}'.format(wj + 1, wi + 1, ))
+    #                         # formatted_values.insert(0, '{: >5d}{: >5d}{: >5d}'.format(_R[0], _R[1], _R[2]))
+    #                         # f.write(''.join(formatted_values) + '\n')
+    #                         f.write(
+    #                             '{: >5d}{: >5d}{: >5d}{: >5d}{: >5d}{: >12.6f}{: >12.6f}\n'.format(_R[0], _R[1], _R[2],
+    #                                                                                                wj + 1, wi + 1,
+    #                                                                                                D_Rmn[i, wj, wi].real,
+    #                                                                                                D_Rmn[i, wj, wi].imag,
+    #                                                                                                )
+    #                         )
+    #         f.close()
 
     def save_wcc(self, fname=r'wcc.vasp', cartesian=False):
         if os.path.exists(fname):
@@ -1038,9 +1052,9 @@ class Htb(object):
         return spin0_Rmn, spin_Ramn
 
     def _read_rr_v2x(self, fname, nR):
-        '''
+        """
          interface with wannier90 v2.x
-        '''
+        """
         with open(fname, 'r') as r_file:
             r_file.readline()
             nw = int(r_file.readline().strip())
@@ -1303,7 +1317,7 @@ class Bandstructure(object):
         self.lattG = 2 * np.pi * LA.inv(latt.T)
 
         self.nmesh = nmesh
-        self.meshk = make_mesh(nmesh, type='continuous')
+        self.meshk = make_mesh(nmesh, mesh_type='continuous')
         self.meshkc = LA.multi_dot([self.lattG, self.meshk.T]).T
 
         self.eig = None # (nk, nb)
@@ -1433,10 +1447,10 @@ class BandstructureHSP(object):
         # f.close()
 
     def plot_2band_compare(self, eemin=-3.0, eemax=3.0, unit='C', save=False, savefname='compareband.png'):
-        import matplotlib
+        # import matplotlib
         import matplotlib.pyplot as plt
         from wanpy.core.toolkits import kmold
-        import matplotlib.pylab as pylab
+        # import matplotlib.pylab as pylab
 
         # matplotlib.rcdefaults()
         # params = {
@@ -1623,8 +1637,8 @@ class BandstructureHSP(object):
 
     def plot_surfDOS(self, ee, surfDOS, eemin=-3.0, eemax=3.0, unit='D', cmap='seismic'):
         import matplotlib.pyplot as plt
-        import matplotlib.gridspec as gridspec
-        from matplotlib.pyplot import subplot
+        # import matplotlib.gridspec as gridspec
+        # from matplotlib.pyplot import subplot
         from wanpy.core.toolkits import kmold
 
         nk, ne = surfDOS.shape
@@ -1668,35 +1682,10 @@ class BandstructureHSP(object):
         fig.tight_layout()
         fig.show()
 
-'''
-  tools
-'''
-def check_htb_equ(htb1, htb2):
-    assert (htb1.R == htb2.R).all()
-    assert (htb1.Rc == htb2.Rc).all()
-    assert (htb1.ndegen == htb2.ndegen).all()
-    assert (np.abs(htb1.hr_Rmn - htb2.hr_Rmn) < 1e-6).all()
-    assert (np.abs(htb1.r_Ramn - htb2.r_Ramn) < 1e-6).all()
-    assert (np.abs(htb1.spin0_Rmn - htb2.spin0_Rmn) < 1e-6).all()
-    assert (np.abs(htb1.spin_Ramn - htb2.spin_Ramn) < 1e-6).all()
 
 '''
   etc.
 '''
-def f_none():
-    '''
-      !!! Do not change the function name !!!
-    ''' #
-    return None
-
-def list2str(alist):
-    astr = ';'.join(alist)
-    return astr
-
-def str2list(astr):
-    alist = astr.split(';')
-    return alist
-
 def hdf5_create_dataset(group, name, data, dtype, **kwds):
     if data is not None:
         group.create_dataset(name, data=data, dtype=dtype, **kwds)
@@ -1715,17 +1704,29 @@ def hdf5_read_dataset(group, name, default=None):
     else:
         return default
 
-def trans_npz_2_hdf5(seedname=r'htb'):
-    htb = Htb()
-    htb.load_npz(seedname+'.npz')
-
-    cell = Cell()
-    for i in ['name', 'lattice', 'latticeG', 'N', 'ions', 'ions_car']:
-        cell.__dict__[i] = htb.cell.__dict__[i]
-    cell.spec = htb.cell.__dict__['spec']
-    htb.cell = cell
-
-    htb.save_h5(seedname+'.h5')
-
-
+# def f_none():
+#     """
+#       !!! Do not change the function name !!!
+#     """
+#     return None
+#
+# def list2str(alist):
+#     astr = ';'.join(alist)
+#     return astr
+#
+# def str2list(astr):
+#     alist = astr.split(';')
+#     return alist
+#
+# def trans_npz_2_hdf5(seedname=r'htb'):
+#     htb = Htb()
+#     htb.load_npz(seedname+'.npz')
+#
+#     cell = Cell()
+#     for i in ['name', 'lattice', 'latticeG', 'N', 'ions', 'ions_car']:
+#         cell.__dict__[i] = htb.cell.__dict__[i]
+#     cell.spec = htb.cell.__dict__['spec']
+#     htb.cell = cell
+#
+#     htb.save_h5(seedname+'.h5')
 

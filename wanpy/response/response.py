@@ -26,8 +26,7 @@ from wanpy.core.mesh import make_kpath
 
 from wanpy.core.bz import gauss_Delta_func, adapted_gauss_Delta_func
 from wanpy.core.bz import get_adaptive_ewide_II, get_adaptive_ewide_III
-from wanpy.core.bz import get_adaptive_ewide_II_slab, get_adaptive_ewide_III_slab
-from wanpy.core.bz import FD_zero, FD, MPgauss, gauss, lorentz
+from wanpy.core.bz import FD_zero
 from wanpy.core.units import *
 
 '''

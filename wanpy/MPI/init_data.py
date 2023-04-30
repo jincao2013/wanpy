@@ -108,11 +108,11 @@ def init_htb_response_data(MPI, htb, tmin_h=-0.1, tmin_r=-0.1, open_boundary=-1,
         Rc_r += LA.multi_dot([htb.cell.lattice, R_r.T]).T
 
         print('')
-        print('                                   --------------')
-        print('                                   Reduced R Grid')
-        print('                                   --------------')
+        print('                               -----------------------')
+        print('                               Reduced R Grid (hr_Rmn)')
+        print('                               -----------------------')
         print('')
-        htb.print_RGrid()
+        htb.print_RGrid(R_hr, np.ones(R_hr.shape[0]))
 
         # object larger than 4Gb cannot bcast
         htb.hr_Rmn = None

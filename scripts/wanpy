@@ -21,14 +21,15 @@ from optparse import OptionParser
 # sys.path.append(os.environ.get('PYTHONPATH'))
 from wanpy.env import __version__
 from wanpy.core.structure import Htb
+from wanpy.core.symmetry import Symmetrize_Htb, get_proj_info, read_symmetry_inputfile
 from wanpy.core.errorhandler import CommandNotFoundError
 from wanpy.interface.wannier90 import W90_eig
 from wanpy.interface.buildwannier import WannierInterpolation
 
 
 def h5htb(argv):
-    usage = 'wanpy htb [-h] [-e fermi_level] \n' + \
-    'Integrate tight-binding informations into a single .h5 file \n'
+    usage = 'wanpy htb [options] \n' + \
+    'gather wannier tight-binding informations into a single .h5 file \n'
 
     if os.path.exists('vasprun.xml'):
         fermi_vasprun = float(re.findall('.\d+.\d+', os.popen('grep efermi vasprun.xml').readline())[0])
@@ -39,18 +40,21 @@ def h5htb(argv):
     parser.add_option("-e", "--efermi", action="store", type="float", dest="fermi", default=fermi_vasprun,
                       help='fermi level')
     parser.add_option("--seedname", action="store", type="str", dest="seedname", default='wannier90')
+    parser.add_option('--symmetry', action="store_true", dest="symmetry",
+                      help="if symmetrizing wannier tb, default is False")
     # parser.add_option("-t", "--type", action="store", type="str", dest="storetype", default='h5')
     parser.add_option('--wsvec', action="store_true", dest="load_wsvec",
                       help="if load wannier90_wsvec.dat, default is False")
-    parser.add_option('--v1', action="store_true", dest="v1_w90interface",
-                      help="set v1_w90interface=True in loading .nnkp, default is False")
+    parser.add_option('--v3', action="store_true", dest="v3_w90interface",
+                      help="set v1_w90interface=False in loading .nnkp, default is True")
 
     options, args = parser.parse_args(argv)
 
     fermi = options.fermi
     seedname = options.seedname
+    symmetric_htb = options.symmetry
     load_wsvec = options.load_wsvec
-    v1_w90interface = options.v1_w90interface
+    v1_w90interface = not options.v3_w90interface
     # storetype = options.storetype
 
     # print instructions
@@ -68,6 +72,21 @@ def h5htb(argv):
     T1 = time.time()
     print('complete loading hamiltonian from {}, time consuming {:.3f} s'.format(seedname, T1-T0))
 
+    # symmetric wannier htb
+    if symmetric_htb:
+        print('symmetrizing wannier tb')
+        ngridR_symmhtb, symmops = read_symmetry_inputfile('symmetry.in')
+        atoms_pos, atoms_orbi = get_proj_info(htb=htb)
+        symmhtb = Symmetrize_Htb(ngridR=ngridR_symmhtb,
+                                 htb=htb,
+                                 symmops=symmops,
+                                 atoms_pos=atoms_pos,
+                                 atoms_orbi=atoms_orbi,
+                                 soc=htb.worbi.soc
+                                 )
+        symmhtb.run()
+        htb = symmhtb.htb
+
     print('Fermi level = {} eV'.format(htb.fermi))
 
     print('The following items are saved in .h5 format')
@@ -80,8 +99,7 @@ def h5htb(argv):
 
 def wannier(argv):
     pass
-    usage = 'wanpy ' + __version__ + \
-            'wanpy wannier [-h] [-e fermi_level] [-v] [-s]\n\n' + \
+    usage = 'wanpy wannier [options] \n\n' + \
             'wanpy.interface.buildwannier.WannierInterpolation:\n' + \
             WannierInterpolation.__doc__
     if os.path.exists('vasprun.xml'):
@@ -92,8 +110,15 @@ def wannier(argv):
 
     parser = OptionParser(usage)
     parser.add_option("-e", "--efermi", action="store", type="float", dest="fermi", default=fermi_vasprun,
-                      help='fermi level, default is extracted from vasprun.xml, or zero if there is no vasprun.xml')
-    parser.add_option("--seedname", action="store", type="str", dest="seedname", default='wannier90')
+                      help='fermi level, default is readed from vasprun.xml, or zero if there is no vasprun.xml')
+    parser.add_option("--seedname", action="store", type="str", dest="seedname", default='wannier90',
+                      help="default is wannier90")
+    parser.add_option('--v3', action="store_true", dest="v3_w90interface",
+                      help="set v1_w90interface=False in loading .nnkp, default is True")
+    parser.add_option('--symmetry', action="store_true", dest="symmetry",
+                      help="if symmetrizing wannier tb, default is False")
+    parser.add_option("-r", '--ramn', action="store_true", dest="cal_r",
+                      help="if interpolat r operator, default is False")
     parser.add_option("-v", '--verbose', action="store_true", dest="verbose",
                       help="be moderately verbose")
     parser.add_option("-s", '--spin', action="store_true", dest="cal_spin",
@@ -102,14 +127,17 @@ def wannier(argv):
                       help="if write .spn file (formated), default is False")
     parser.add_option('--dat', action="store_true", dest="write_dat",
                       help="if write .dat file (formated), default is False")
-    parser.add_option('--decimal', action="store", type="int", dest="decimals", default=7,
-                      help="save .h5 with rounded double precision, default decimals is 7")
+    parser.add_option('--decimal', action="store", type="int", dest="decimals", default=16,
+                      help="save .h5 with rounded double precision, default decimals is 16")
 
     options, args = parser.parse_args(argv)
 
     fermi = options.fermi
     seedname = options.seedname
+    v1_w90interface = not options.v3_w90interface
     verbose = options.verbose
+    symmetric_htb = options.symmetry
+    cal_r = options.cal_r
     cal_spin = options.cal_spin
     write_spn = options.write_spn
     write_dat = options.write_dat
@@ -120,10 +148,13 @@ def wannier(argv):
         print('WAVECAR will be used for interpolating spin operator.')
 
     T0 = time.time()
-    wanrun = WannierInterpolation(fermi, verbose=verbose)
+    wanrun = WannierInterpolation(fermi, seedname=seedname,
+                                  symmetric_htb=symmetric_htb, symmetry_inputfile='symmetry.in',
+                                  v1_w90interface=v1_w90interface,
+                                  verbose=verbose)
     # wanrun.run(cal_r=True, cal_spin=cal_spin, write_htb=True, write_spn=write_spn)
-    wanrun.run(cal_r=True, cal_spin=cal_spin, write_h5=True, write_dat=write_dat,
-               write_spn=write_spn, hermite_r=True, decimals=decimals)
+    wanrun.run(cal_r=cal_r, cal_spin=cal_spin, write_h5=True, write_dat=write_dat,
+               write_spn=write_spn, decimals=decimals)
     T1 = time.time()
 
     print('Wannier interpolation completed, time consuming {:.3f} s'.format(T1-T0))
@@ -161,12 +192,23 @@ and the resulting .eig will restored with name `wannier90.eig.zero`.
     print('E(wannier) = E(DFT) - ({}) eV'.format(fermi))
 
 def main():
-    usage = "usage: wanpy [-h] [-V] command ..."
-    job_list = ['-h', '-V',
+    usage = """
+Usage: wanpy [-h] [-V] [options] ...
+
+Options: 
+  -h, --help            show this help message and exit
+  -V                    show wanpy version
+  --temp                generate symmetry.in for wanpy
+  htb                   gather wannier tb data POSCAR .wout _hr.dat [_r.dat _spin.dat _wsvec.dat .nnkp]
+                        into a single .h5 file,
+                        [...] are optional.                             (use wanpy htb -h for details)
+  wannier               get wannier tb model from .chk .eig .wout .nnkp (use wanpy wannier -h for details)
+    """
+    job_list = ['-h', '--help', '-V', '--temp',
                 'htb',
                 'wannier',
                 'set_w90eig_fermi_eq_zero',
-                'test']
+                ]
     # print(job_list)
 
     if len(sys.argv) == 1:
@@ -179,13 +221,29 @@ def main():
     if job not in job_list:
         raise CommandNotFoundError('wanpy {}'.format(job))
 
-    if job == '-h':
+    if job in ['-h', '--help']:
         print(usage)
         exit()
 
     if job == '-V':
         print('wanpy {}'.format(__version__))
         exit()
+
+    if job == '--temp':
+        temp_input = """
+ngridR = 14 14 14
+&symmops
+# TR  det  alpha  nx  ny  nz  taux  tauy  tauz
+  1   1    0      0   0   1   0     0     0   # e
+  1   1    180    0   0   1   0.5   0.5   0   # c2z
+# anti unitary
+ -1   1    0      0   0   1   0.5   0.5   0   # T
+ -1   1    180    0   0   1   0     0     0   # Tc2z
+/
+"""
+        with open('symmetry.in', 'a+') as f:
+            f.write(temp_input)
+        f.close()
 
     if job == 'htb':
         h5htb(argv)

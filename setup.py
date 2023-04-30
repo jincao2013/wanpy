@@ -33,16 +33,11 @@ setup(
     author_email=__email__,
     description='This is the wanpy module.',
     classifiers=[
-        #   3 - Alpha
-        #   4 - Beta
-        #   5 - Production/Stable
-        'Development Status :: 3 - Alpha',
-        'Intended Audience :: Developers',
         "Programming Language :: Python :: 3",
         "License :: GPL License",
         "Operating System :: OS Independent",
     ],
     python_requires='>=3.6',
-    install_requires=['numpy', 'scipy', 'matplotlib', 'pandas', 'mpi4py', 'h5py'],
+    install_requires=['numpy', 'scipy', 'sympy', 'matplotlib', 'pandas', 'mpi4py', 'h5py'],
 )
 
