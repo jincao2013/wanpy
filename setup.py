@@ -23,7 +23,7 @@ scripts_wanpy = [
 setup(
     name='wanpy',
     version=__version__,
-    include_package_data=True,
+    # include_package_data=True,
     packages=packages_wanpy,
     # packages=setuptools.find_packages(),
     scripts=scripts_wanpy,
