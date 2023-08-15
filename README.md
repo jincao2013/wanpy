@@ -66,7 +66,7 @@ WanPy can collect necessary Wannier TB data into a single `.h5` file as the inpu
 
 
 
-**Method 1**: from `wanpy htb`, this will need at least `POSCAR, .wout, _hr.dat `, `.nnkp`,  `_r.dat`, `_wsvec.dat`, and `_spin.dat` are optional. 
+**Method 1**: from `wanpy htb`, this will need at least `POSCAR, .wout, _hr.dat `. The files `.nnkp`,  `_r.dat`, `_wsvec.dat`, and `_spin.dat` are optional. 
 
 ```bash
 # start to collect Wannier TB data 
