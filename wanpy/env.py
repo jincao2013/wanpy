@@ -13,7 +13,7 @@ import os
 
 __author__ = 'Jin Cao'
 __email__ = "caojin.phy@gmail.com"
-__version__ = "0.14.3"
+__version__ = "0.14.4"
 
 
 ROOT_WDIR = r''
