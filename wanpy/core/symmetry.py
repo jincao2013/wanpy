@@ -366,7 +366,8 @@ def get_rep_spin(symmop):
     TR, det, theta, nx, ny, nz, taux, tauy, tauz = symmop
     axis = np.array([nx, ny, nz]) / LA.norm(np.array([nx, ny, nz]))
     D = np.cos(theta/2) * sigma0 - 1j * np.sin(theta/2) * np.einsum('amn,a->mn', sigma[1:], axis)
-    if TR == -1: D = -1j * sigmay @ D
+    # if TR == -1: D = -1j * sigmay @ D # this line is incorrect, see operation rule for corepresentation.
+    if TR == -1: D = D @ (-1j * sigmay)
     D[np.abs(D)<1e-10] = 0
     return D
 

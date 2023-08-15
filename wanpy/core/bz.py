@@ -32,6 +32,7 @@ def fermi_dirac_func(E, smear=0, ismear=0):
     # zero temperature:
     if smear == 0:
         f = (1. - np.sign(E)) / 2.
+        return f
 
     # finite temperature:
     if ismear == -1:
@@ -242,7 +243,7 @@ def get_adaptive_ewide_II_slab(v, E, U, dk, N_ucell, open_boundary=-1, a=np.sqrt
     return W
 
 
-def get_adaptive_ewide_III_slab(v, E, U, dk, N_ucell, open_boundary=-1, a=np.sqrt(2), ewide_min=0.001, inf_CenterW=False, win=None):
+def get_adaptive_ewide_III_slab(v, E, U, dk, N_ucell, open_boundary=-1, scaling=np.sqrt(2), ewide_min=0.001, inf_CenterW=False, win=None):
     '''
       Slab version of get_adaptive_ewide_III
       * recover to get_adaptive_ewide_III when open_boundary = -1.
@@ -269,7 +270,7 @@ def get_adaptive_ewide_III_slab(v, E, U, dk, N_ucell, open_boundary=-1, a=np.sqr
     vx, vy, vz = np.real(np.diagonal(v.T))
 
     vv = np.array([vx, vy, vz])
-    W = (a * dk * vv.T).T
+    W = (scaling * dk * vv.T).T
     is_surf = None
 
     if open_boundary >= 0:
@@ -279,7 +280,7 @@ def get_adaptive_ewide_III_slab(v, E, U, dk, N_ucell, open_boundary=-1, a=np.sqr
         invE = np.real(1 / (e2 - e1 - 1j * 1e-8))
         r_ob = v_ob * invE * filter
         r_ob = np.argmax(np.abs(r_ob), axis=0)
-        W[open_boundary] = a * np.array([E[j] - E[i] for i, j in zip(range(nw), r_ob)])
+        W[open_boundary] = scaling * np.array([E[j] - E[i] for i, j in zip(range(nw), r_ob)])
 
         # set surface state with minimal ewide
         is_surf = get_is_surf(U, nw, nw_uc, N_ucell, tolerance=0.3)
@@ -320,7 +321,7 @@ def get_adaptive_ewide_III_slab(v, E, U, dk, N_ucell, open_boundary=-1, a=np.sqr
 def adapted_gauss_Delta_func(E, ee, v, dk, a=np.sqrt(2), ewide_min=0.001, ewide_max=None):
     D = np.meshgrid(E, E, ee)
     D = D[1] - D[0] - D[2]
-    W = get_adaptive_ewide_III(v, dk, a=a, ewide_min=ewide_min, ewide_max=ewide_max)
+    W = get_adaptive_ewide_III(v, dk, scaling=a, ewide_min=ewide_min, ewide_max=ewide_max)
     D = np.exp(-0.5 * (D.T / W.T) ** 2) / W.T / np.sqrt(2 * np.pi)
     D = D.T
     return D
@@ -329,7 +330,7 @@ def adapted_gauss_Delta_func_slab(E, ee, v, U, dk, N_ucell, open_boundary=-1, a=
     D = np.meshgrid(E, E, ee)
     D = D[1] - D[0] - D[2]
     W = get_adaptive_ewide_III_slab(v, E, U, dk, N_ucell,
-                                     open_boundary=open_boundary, a=a, ewide_min=ewide_min, inf_CenterW=inf_CenterW, win=win)
+                                     open_boundary=open_boundary, scaling=a, ewide_min=ewide_min, inf_CenterW=inf_CenterW, win=win)
     D = np.exp(-0.5 * (D.T / W.T) ** 2) / W.T / np.sqrt(2 * np.pi)
     D = D.T
     return D

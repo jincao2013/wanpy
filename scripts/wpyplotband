@@ -1,12 +1,15 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python
 
-__author__ = 'Jin Cao'
-__copyright__ = "Copyright 2019, Quantum Functional Materials Design and Application Laboratory"
-__version__ = "0.99"
-__maintainer__ = "Jin Cao"
-__email__ = "caojin.phy@gmail.com"
-__date__ = "Dec. 6, 2019"
+# Copyright (C) 2023 Jin Cao
+#
+# This file is distributed as part of the wanpy code and
+# under the terms of the GNU General Public License. See the
+# file LICENSE in the root directory of the wanpy
+# distribution, or http://www.gnu.org/licenses/gpl-3.0.txt
+#
+# The wanpy code is hosted on GitHub:
+#
+# https://github.com/jincao2013/wanpy
 
 import os
 import sys
@@ -15,15 +18,12 @@ from optparse import OptionParser
 sys.path.append(os.environ.get('PYTHONPATH'))
 import numpy as np
 from numpy import linalg as LA
-from wanpy.interface.vasp import VASP_EIGENVAL_HSP
 from wanpy.interface.wannier90 import W90_band
-# from wanpy.core.DEL.read_write import Cell
 from wanpy.core.structure import Cell
 from wanpy.env import ROOT_WDIR, PYGUI
 from pymatgen.io.vasp.inputs import Kpoints
 from pymatgen.io.vasp.outputs import Vasprun, Eigenval
 from pymatgen.electronic_structure.core import Spin
-from pymatgen.electronic_structure.core import Orbital as Ob
 import matplotlib
 import matplotlib.pyplot as plt
 
@@ -138,50 +138,94 @@ def plot_compare(cell, vaspeig, w90_band, yy=[-1,1], HSP='G-G', fermi_dft=0, fer
     else:
         plt.show()
 
-# def plot_dft_band():
-#     plt.figure(figsize=(8, 6))
+# def plot_dft_band(cell, vaspeig, yy=[-1,1], HSP='G-G', fermi_dft=0, spin='all', savefig=False):
+#     ispin = vaspeig.ispin
 #
-#     plt.axis([vasp_eig.kpath.min(), vasp_eig.kpath.max(), yy[0], yy[1]])
+#     nk, nb, nele = vaspeig.nkpt, vaspeig.nbands, vaspeig.nelect
+#     band_gap, cbm, vbm, is_band_gap_direct = vaspeig.eigenvalue_band_properties
+#
+#     kk = np.array(vaspeig.kpoints, dtype='float64')
+#     kkc = LA.multi_dot([cell.latticeG, kk.T]).T
+#     kpath = kmold(kkc)
+#     kk_weights = np.array(vaspeig.kpoints_weights, dtype='float64')
+#
+#     band_1 = vaspeig.eigenvalues.get(Spin.up)[:,:,0]
+#     band_2 = vaspeig.eigenvalues.get(Spin.down)[:,:,0] if ispin == 2 else 0
+#
+#     nline = len(HSP.split('-')) - 1
+#
+#     print('Info from plot_dft_band_dev:')
+#     print('ispin = ', ispin)
+#     print('band_gap, cbm, vbm, is_band_gap_direct = ', vaspeig.eigenvalue_band_properties)
+#     print('fermi level = ', fermi_dft)
+#
+#     '''
+#       * Plot
+#     '''
+#     plt.figure(figsize=[4, 3], dpi=150)
+#
+#     plt.axis([kpath.min(), kpath.max(), yy[0], yy[1]])
 #
 #     ax = plt.gca()
-#     ax.set_ylabel('E-Ef/eV')
+#     ax.set_ylabel('$E-E_F$ (eV)')
 #
 #     plt.axhline(0, linestyle='--', color='k', linewidth=1, alpha=1, zorder=2)
 #     for i in range(1, nline):
-#         plt.axvline(x=vasp_eig.kpath[i * int(vasp_eig.nk / nline)], linestyle='--', color='k', linewidth=1, alpha=1, zorder=2)
+#         plt.axvline(x=kpath[i * int(nk / nline)], linestyle='--', color='k', linewidth=1, alpha=1, zorder=2)
+#
+#     # plot HSP
+#     i_HSP = np.arange(nline+1) * (nk // nline)
+#     i_HSP[-1] = -1
+#     plt.xticks(kpath[i_HSP], HSP.split('-'))
 #
 #     # bloch band
-#     for i in range(vasp_eig.nb):
-#         plt.plot(vasp_eig.kpath, vasp_eig.eig.T[i] - fermi_dft, linewidth=1.5, linestyle="-", color='black', alpha=1.0)
+#     if ispin == 2:
+#         if spin == 'all':
+#             plt.plot(kpath, band_1-fermi_dft, linewidth=1., linestyle="-", color='red', alpha=1.0)
+#             plt.plot(kpath, band_2-fermi_dft, linewidth=1., linestyle="-", color='blue', alpha=1.0)
+#         elif spin == 'up':
+#             plt.plot(kpath, band_1-fermi_dft, linewidth=1., linestyle="-", color='black', alpha=1.0)
+#         elif spin == 'dn':
+#             plt.plot(kpath, band_2-fermi_dft, linewidth=1., linestyle="-", color='black', alpha=1.0)
+#         else:
+#             pass
+#     else:
+#         plt.plot(kpath, band_1-fermi_dft, linewidth=1., linestyle="-", color='black', alpha=1.0)
 #
-#     if HSP is not None:
-#         i_HSP = np.arange(nline+1) * (vasp_eig.nk // nline)
-#         i_HSP[-1] = -1
-#         plt.xticks(vasp_eig.kpath[i_HSP], HSP)
-#
-#     plt.show()
+#     # plt.show()
 #     plt.tight_layout()
+#
+#     if savefig:
+#         plt.savefig('dftband.pdf')
+#     else:
+#         plt.show()
 
 def plot_dft_band(cell, vaspeig, yy=[-1,1], HSP='G-G', fermi_dft=0, spin='all', savefig=False):
+    print('Info from plot_dft_band:')
     ispin = vaspeig.ispin
 
     nk, nb, nele = vaspeig.nkpt, vaspeig.nbands, vaspeig.nelect
     band_gap, cbm, vbm, is_band_gap_direct = vaspeig.eigenvalue_band_properties
+    kk_weights = np.array(vaspeig.kpoints_weights, dtype='float64')
+    bandindex = ...
 
-    kk = np.array(vaspeig.kpoints, dtype='float64')
+    if np.sum(np.isclose(kk_weights, 0)) >= 1:
+        print('Found HSE type EIGENVAL, plot kpoint with zero weight.')
+        bandindex = np.where(np.isclose(kk_weights, 0))[0]
+        nk = bandindex.shape[0]
+
+    kk = np.array(vaspeig.kpoints, dtype='float64')[bandindex]
     kkc = LA.multi_dot([cell.latticeG, kk.T]).T
     kpath = kmold(kkc)
-    kk_weights = np.array(vaspeig.kpoints_weights, dtype='float64')
 
-    band_1 = vaspeig.eigenvalues.get(Spin.up)[:,:,0]
-    band_2 = vaspeig.eigenvalues.get(Spin.down)[:,:,0] if ispin == 2 else 0
+    band_1 = vaspeig.eigenvalues.get(Spin.up)[bandindex,:,0]
+    band_2 = vaspeig.eigenvalues.get(Spin.down)[bandindex,:,0] if ispin == 2 else 0
 
     nline = len(HSP.split('-')) - 1
 
-    print('Info from plot_dft_band_dev:')
-    print('ispin = ', ispin)
-    print('band_gap, cbm, vbm, is_band_gap_direct = ', vaspeig.eigenvalue_band_properties)
-    print('fermi level = ', fermi_dft)
+    print('ispin: ', ispin)
+    print('band_gap, cbm, vbm, is_band_gap_direct: ', vaspeig.eigenvalue_band_properties)
+    print('fermi level in plot: ', fermi_dft)
 
     '''
       * Plot
@@ -191,7 +235,7 @@ def plot_dft_band(cell, vaspeig, yy=[-1,1], HSP='G-G', fermi_dft=0, spin='all', 
     plt.axis([kpath.min(), kpath.max(), yy[0], yy[1]])
 
     ax = plt.gca()
-    ax.set_ylabel('$E-E_F$ (eV)')
+    ax.set_ylabel('$E$ (eV)')
 
     plt.axhline(0, linestyle='--', color='k', linewidth=1, alpha=1, zorder=2)
     for i in range(1, nline):
@@ -255,7 +299,6 @@ if PYGUI:
 else:
     wdir = os.getcwd()
 
-
 if __name__ == '__main__':
     os.chdir(wdir)
 
@@ -312,35 +355,11 @@ if __name__ == '__main__':
 
         savefig = options.savefig
 
-        # print(seedname)
-        # sys.exit()
-
     if os.path.exists(seedname+'.wout'):
         HSP = load_HSP_from_wout(seedname)
 
     if savefig:
         matplotlib.use('Agg')
-
-    # cell = Cell()
-    # cell.load_poscar()
-
-    # if Job in ['dft', 'compare']:
-    #     vasp_eig = VASP_EIGENVAL_HSP(cell.lattice)
-    #     vasp_eig.load_from_vasp(r'EIGENVAL.HSP')
-    #
-    # if Job in ['wan', 'compare']:
-    #     w90_band = W90_band(cell.lattice)
-    #     w90_band.load_from_w90()
-
-
-# if __name__ == "__main__" and Job == "dft":
-#     cell = Cell()
-#     cell.load_poscar()
-#
-#     vasp_eig = VASP_EIGENVAL_HSP(cell.lattice)
-#     vasp_eig.load_from_vasp(r'EIGENVAL.HSP')
-#
-#     plot_dft_band()
 
 if __name__ == "__main__" and Job == "wan":
     cell = Cell()
@@ -356,22 +375,7 @@ if __name__ == "__main__" and Job == "dft":
     cell.load_poscar()
     vaspeig = Eigenval(r'EIGENVAL.HSP')
 
-    # ispin = vaspeig.ispin
-    #
-    # nk, nb, nele = vaspeig.nkpt, vaspeig.nbands, vaspeig.nelect
-    # band_gap, cbm, vbm, is_band_gap_direct = vaspeig.eigenvalue_band_properties
-    #
-    # kk = np.array(vaspeig.kpoints, dtype='float64')
-    # kkc = LA.multi_dot([cell.latticeG, kk.T]).T
-    # kpath = kmold(kkc)
-    # kk_weights = np.array(vaspeig.kpoints_weights, dtype='float64')
-    #
-    # band_up = vaspeig.eigenvalues.get(Spin.up)
-    # band_down = vaspeig.eigenvalues.get(Spin.down)
-
     plot_dft_band(cell, vaspeig, HSP=HSP, yy=yy, fermi_dft=fermi_dft, spin=spin, savefig=savefig)
-
-    # get_wannier_win_kpoints(fname='KPOINTS')
 
 if __name__ == "__main__" and Job == "compare":
     cell = Cell()

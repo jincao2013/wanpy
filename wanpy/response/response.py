@@ -26,7 +26,7 @@ from wanpy.core.mesh import make_kpath
 
 from wanpy.core.bz import gauss_Delta_func, adapted_gauss_Delta_func
 from wanpy.core.bz import get_adaptive_ewide_II, get_adaptive_ewide_III
-from wanpy.core.bz import FD_zero
+from wanpy.core.bz import FD_zero, FD, fermi_dirac_func
 from wanpy.core.units import *
 
 '''
@@ -361,6 +361,13 @@ def cal_dos(htb, k, ee, ewide=0.005, ewide_min=0.005):
     dos_ad = np.einsum('an->a', delta_an_AD, optimize=True)
     return dos, dos_ad
 
+def cal_int_dos(htb, k, ee, ewidth=0.005):
+    v, vw, E, U, hk, hkk, Awk = get_fft001(htb, k)
+
+    npmesh = np.meshgrid(ee, E)
+    f = fermi_dirac_func(npmesh[1] - npmesh[0], smear=ewidth, ismear=-1)
+    int_dos = np.einsum('ne->e', f)
+    return int_dos
 
 def cal_jdos(htb, k, ee, ewide=0.005, ewide_min=0.005, isADwide=True):
     v, vw, E, U, hk, hkk, Awk = get_fft001(htb, k)
