@@ -231,14 +231,14 @@ Options:
 
     if job == '--temp':
         temp_input = """
-ngridR = 14 14 14
+ngridR = 14 14 14  # use a larger value than the original Wannier TB model
 &symmops
 # TR  det  alpha  nx  ny  nz  taux  tauy  tauz
-  1   1    0      0   0   1   0     0     0   # e
-  1   1    180    0   0   1   0.5   0.5   0   # c2z
+  0   1    0      0   0   1   0     0     0   # e
+  0   1    180    0   0   1   0.5   0.5   0   # c2z
 # anti unitary
- -1   1    0      0   0   1   0.5   0.5   0   # T
- -1   1    180    0   0   1   0     0     0   # Tc2z
+  1   1    0      0   0   1   0.5   0.5   0   # T
+  1   1    180    0   0   1   0     0     0   # Tc2z
 /
 """
         with open('symmetry.in', 'a+') as f:

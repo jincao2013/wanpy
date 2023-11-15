@@ -9,11 +9,12 @@ WanPy requires the following packages to be installed:
 - matplotlib
 - h5py
 - mpi4py
+- fortio
 
 ## Installation
 1. To install WanPy, create a Conda environment with the required packages:
 ```bash
-$ conda create -n wanpy python=3.7 numpy scipy pandas sympy matplotlib h5py mpi4py
+$ conda create -n wanpy python=3.7 numpy scipy pandas sympy matplotlib h5py mpi4py fortio
 ````
 
 2. Uncompress wanpy package in personal computer or clusters: 
@@ -79,7 +80,7 @@ $ wanpy htb -h
 
 
 
-**Method 2**: from `wanpy wannier`, this will need `.nnkp, .wout, .chk, .eig`, and `WAVECAR` if  `--spn`. The `nnkp` file can be obtained by: 
+**Method 2**: from `wanpy wannier`, this will need `POSCAR .nnkp, .wout, .chk, .eig`, and `WAVECAR` if  `--spn`. The `nnkp` file can be obtained by: 
 
 ```bash
 $ wannier90.x -pp wannier90.win 
@@ -106,11 +107,11 @@ Set symmetry operations that used to symmetrize the model in `symmetry.in`,
 ngridR = 14 14 14  # use a larger value than the original Wannier TB model
 &symmops
 # TR  det  alpha  nx  ny  nz  taux  tauy  tauz
-  1   1    0      0   0   1   0     0     0   # e
-  1   1    180    0   0   1   0.5   0.5   0   # c2z
+  0   1    0      0   0   1   0     0     0   # e
+  0   1    180    0   0   1   0.5   0.5   0   # c2z
 # anti unitary
- -1   1    0      0   0   1   0.5   0.5   0   # T
- -1   1    180    0   0   1   0     0     0   # Tc2z
+  1   1    0      0   0   1   0.5   0.5   0   # T
+  1   1    180    0   0   1   0     0     0   # Tc2z
 /
 ```
 

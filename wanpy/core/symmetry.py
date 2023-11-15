@@ -23,29 +23,29 @@ from wanpy.core.structure import Htb
 from wanpy.core.units import *
 
 
-class MPointGroup(object):
-
-    def __init__(self):
-        self.name = None
-        self.latt = None
-        self.lattG = None
-        self.n_op = None
-        self.elements = None
-        self.op_axis = None
-        self.op_fraction = None
-        self.op_cartesian = None
-        self.TR = None
-
-    def get_op_cartesian(self):
-        self.n_op = len(self.op_axis)
-        self.op_cartesian = np.zeros([self.n_op, 3, 3], dtype='float64')
-        self.TR = np.zeros([self.n_op], dtype='float64')
-        for i in range(self.n_op):
-            _TR, det, theta, nx, ny, nz = self.op_axis[i]
-            n = np.array([nx, ny, nz]) / LA.norm(np.array([nx, ny, nz]))
-            rot = scipy_rot.from_rotvec(theta * n)
-            self.op_cartesian[i] = det * rot.as_matrix()
-            self.TR[i] = _TR
+# class MPointGroup(object):
+#
+#     def __init__(self):
+#         self.name = None
+#         self.latt = None
+#         self.lattG = None
+#         self.n_op = None
+#         self.elements = None
+#         self.op_axis = None
+#         self.op_fraction = None
+#         self.op_cartesian = None
+#         self.TR = None
+#
+#     def get_op_cartesian(self):
+#         self.n_op = len(self.op_axis)
+#         self.op_cartesian = np.zeros([self.n_op, 3, 3], dtype='float64')
+#         self.TR = np.zeros([self.n_op], dtype='float64')
+#         for i in range(self.n_op):
+#             _TR, det, theta, nx, ny, nz = self.op_axis[i]
+#             n = np.array([nx, ny, nz]) / LA.norm(np.array([nx, ny, nz]))
+#             rot = scipy_rot.from_rotvec(theta * n)
+#             self.op_cartesian[i] = det * rot.as_matrix()
+#             self.TR[i] = _TR
 
 
 class Symmetrize_Htb(object):
@@ -90,8 +90,11 @@ class Symmetrize_Htb(object):
         # self.eiktau = np.exp(2j * np.pi * np.einsum('ka,ja->kj', self.meshk, wccf))
 
     def run(self, tmin=1e-6):
+        self.check_valid_symmops()
         htb = self.htb
         symmops, atoms_pos, atoms_orbi, soc = self.symmops, self.atoms_pos, self.atoms_orbi, self.soc
+
+        # write symmops info into htb
         htb.symmops = symmops
 
         # get h and r in meshk from original htb
@@ -132,15 +135,15 @@ class Symmetrize_Htb(object):
             print('[Symmetrize_Htb] symmetrizing hr_kmn and r_kamn {}/{}'.format(i+1, self.nsymmops))
             TR = symmops[i][0]
             invg = LA.inv(get_op_cartesian(symmops[i]))
-            meshkc_invg = (invg @ self.meshkc.T).T * TR
+            meshkc_invg = (invg @ self.meshkc.T).T * (-1)**TR
             meshk_invg = (LA.inv(self.lattG) @ meshkc_invg.T).T
             corep = self.get_corep(symmops[i])
             hk_kmn = self.ft_gridR_to_meshk(htb.hr_Rmn, meshk_invg, htb.R, htb.ndegen, tbgauge=True)
             r_kamn = self.ft_gridR_to_meshk(htb.r_Ramn, meshk_invg, htb.R, htb.ndegen, tbgauge=True)
-            if int(symmops[i, 0]) == 1:
+            if int(TR) == 0:
                 hk_kmn_symm += np.einsum('mi,kij,jn->kmn', corep, hk_kmn, corep.T.conj(), optimize=True)
                 r_kamn_symm += np.einsum('mi,kaij,jn->kamn', corep, r_kamn, corep.T.conj(), optimize=True)
-            elif int(symmops[i, 0]) == -1:
+            elif int(TR) == 1:
                 hk_kmn_symm += np.einsum('mi,kij,jn->kmn', corep, np.conj(hk_kmn), corep.T.conj(), optimize=True)
                 r_kamn_symm += np.einsum('mi,kaij,jn->kamn', corep, np.conj(r_kamn), corep.T.conj(), optimize=True)
 
@@ -179,6 +182,11 @@ class Symmetrize_Htb(object):
         for i in range(3):
             self.htb.r_Ramn[self.htb.nR//2, i] *= 1 - np.eye(self.htb.nw)
             self.htb.r_Ramn[self.htb.nR//2, i] += np.diag(self.wcc.T[i])
+
+    def check_valid_symmops(self):
+        symmops = self.symmops
+        assert set([int(i) for i in symmops.T[0]]) == {0, 1}
+        assert set([int(i) for i in symmops.T[1]]) == {-1, 1}
 
     '''
       * F.T. between R-space and k-space
@@ -281,7 +289,7 @@ class Symmetrize_Htb(object):
     # def get_index_invgk(self, symmop):
     #     TR = symmop[0]
     #     invg = LA.inv(get_op_cartesian(symmop))
-    #     meshkc_rot = (invg @ self.meshkc.T).T * TR
+    #     meshkc_rot = (invg @ self.meshkc.T).T * (-1)**TR
     #     meshk_rot = (LA.inv(self.lattG) @ meshkc_rot.T).T
     #     meshk_rot = np.remainder(meshk_rot + 1e-10, 1.0)
     #     meshkc_rot = (self.lattG @ meshk_rot.T).T
@@ -366,8 +374,8 @@ def get_rep_spin(symmop):
     TR, det, theta, nx, ny, nz, taux, tauy, tauz = symmop
     axis = np.array([nx, ny, nz]) / LA.norm(np.array([nx, ny, nz]))
     D = np.cos(theta/2) * sigma0 - 1j * np.sin(theta/2) * np.einsum('amn,a->mn', sigma[1:], axis)
-    # if TR == -1: D = -1j * sigmay @ D # this line is incorrect, see operation rule for corepresentation.
-    if TR == -1: D = D @ (-1j * sigmay)
+    # if TR == 1: D = -1j * sigmay @ D # this line is incorrect, see operation rule for corepresentation.
+    if TR == 1: D = D @ (-1j * sigmay)
     D[np.abs(D)<1e-10] = 0
     return D
 
@@ -515,6 +523,8 @@ def read_symmetry_inputfile(fname='symmetry.in'):
                         symmops_i = [float(i) for i in symmops_i]
                         symmops_i[2] = symmops_i[2]/180 * np.pi
                         symmops.append(symmops_i)
+                        assert int(symmops_i[0]) in [0, 1]
+                        assert int(symmops_i[1]) in [-1, 1]
     symmops = np.array(symmops)
     f.close()
     return ngridR, symmops
@@ -542,28 +552,28 @@ if __name__ == "__main__":
     # ngridR = np.array([14, 14, 14])
     # symmops = np.array([
     #     # TR, det, alpha, nx, ny, nz, taux, tauy, tauz
-    #     [1, 1, 0, 0, 0, 1, 0, 0, 0], # e
-    #     [1, 1, np.pi, 1, 0, 0, 0, 0, 0], # c2x
-    #     [1, 1, np.pi, 0, 1, 0, 0.5, 0.5, 0], # c2y
-    #     [1, 1, np.pi, 0, 0, 1, 0.5, 0.5, 0], # c2z
-    #     [1, -1, 0, 0, 0, 1, 0, 0, 0], # P
-    #     [1, -1, np.pi, 1, 0, 0, 0, 0, 0], # mx
-    #     [1, -1, np.pi, 0, 1, 0, 0.5, 0.5, 0], # my
-    #     [1, -1, np.pi, 0, 0, 1, 0.5, 0.5, 0], # mz
+    #     [0, 1, 0, 0, 0, 1, 0, 0, 0], # e
+    #     [0, 1, np.pi, 1, 0, 0, 0, 0, 0], # c2x
+    #     [0, 1, np.pi, 0, 1, 0, 0.5, 0.5, 0], # c2y
+    #     [0, 1, np.pi, 0, 0, 1, 0.5, 0.5, 0], # c2z
+    #     [0, -1, 0, 0, 0, 1, 0, 0, 0], # P
+    #     [0, -1, np.pi, 1, 0, 0, 0, 0, 0], # mx
+    #     [0, -1, np.pi, 0, 1, 0, 0.5, 0.5, 0], # my
+    #     [0, -1, np.pi, 0, 0, 1, 0.5, 0.5, 0], # mz
     #     # anti unitary
-    #     [-1, 1, 0, 0, 0, 1, 0.5, 0.5, 0], # T
-    #     [-1, 1, np.pi, 1, 0, 0, 0.5, 0.5, 0], # c2xT
-    #     [-1, 1, np.pi, 0, 1, 0, 0, 0, 0], # c2yT
-    #     [-1, 1, np.pi, 0, 0, 1, 0, 0, 0], # c2zT
-    #     [-1, -1, 0, 0, 0, 1, 0.5, 0.5, 0], # PT
-    #     [-1, -1, np.pi, 1, 0, 0, 0.5, 0.5, 0], # mxT
-    #     [-1, -1, np.pi, 0, 1, 0, 0, 0, 0], # myT
-    #     [-1, -1, np.pi, 0, 0, 1, 0, 0, 0], # mzT
+    #     [1, 1, 0, 0, 0, 1, 0.5, 0.5, 0], # T
+    #     [1, 1, np.pi, 1, 0, 0, 0.5, 0.5, 0], # c2xT
+    #     [1, 1, np.pi, 0, 1, 0, 0, 0, 0], # c2yT
+    #     [1, 1, np.pi, 0, 0, 1, 0, 0, 0], # c2zT
+    #     [1, -1, 0, 0, 0, 1, 0.5, 0.5, 0], # PT
+    #     [1, -1, np.pi, 1, 0, 0, 0.5, 0.5, 0], # mxT
+    #     [1, -1, np.pi, 0, 1, 0, 0, 0, 0], # myT
+    #     [1, -1, np.pi, 0, 0, 1, 0, 0, 0], # mzT
     # ])
     # # symmops = np.array([
     # #     # TR, det, alpha, nx, ny, nz, taux, tauy, tauz
-    # #     [1, 1, 0, 0, 0, 1, 0, 0, 0], # e
-    # #     [-1, -1, 0, 0, 0, 1, 0.5, 0.5, 0], # PT
+    # #     [0, 1, 0, 0, 0, 1, 0, 0, 0], # e
+    # #     [1, -1, 0, 0, 0, 1, 0.5, 0.5, 0], # PT
     # # ])
     # # atoms_pos = [
     # #     np.array([
@@ -591,15 +601,15 @@ if __name__ == "__main__":
     ngridR = np.array([6, 16, 6])
     symmops = np.array([
         # TR, det, alpha, nx, ny, nz, taux, tauy, tauz
-        [1, 1, 0, 0, 0, 1, 0, 0, 0], # e
-        [1, -1, 0, 0, 0, 1, 0, 0, 0], # P
-        [1, -1, np.pi, 0, 1, 0, 0, 0, 0], # My
-        [1, 1, np.pi, 0, 1, 0, 0, 0, 0], # C2y
+        [0, 1, 0, 0, 0, 1, 0, 0, 0], # e
+        [0, -1, 0, 0, 0, 1, 0, 0, 0], # P
+        [0, -1, np.pi, 0, 1, 0, 0, 0, 0], # My
+        [0, 1, np.pi, 0, 1, 0, 0, 0, 0], # C2y
         # anti unitary
-        [-1, 1, 0, 0, 0, 1, 0.5, 0.5, 0], # ~T
-        [-1, -1, 0, 0, 0, 1, 0.5, 0.5, 0], # ~TP
-        [-1, -1, np.pi, 0, 1, 0, 0.5, 0.5, 0], # ~TMy
-        [-1, 1, np.pi, 0, 1, 0, 0.5, 0.5, 0], # ~TC2y
+        [1, 1, 0, 0, 0, 1, 0.5, 0.5, 0], # ~T
+        [1, -1, 0, 0, 0, 1, 0.5, 0.5, 0], # ~TP
+        [1, -1, np.pi, 0, 1, 0, 0.5, 0.5, 0], # ~TMy
+        [1, 1, np.pi, 0, 1, 0, 0.5, 0.5, 0], # ~TC2y
     ])
     atoms_pos = [
         np.array([
@@ -643,8 +653,3 @@ if __name__ == "__main__":
     # htb.r_Ramn = None
     # htb.save_htb(r'htb.vs2vs.afmy.symm.h5')
     # htb.save_wannier90_hr_dat(fmt='18.12')
-
-
-
-
-

@@ -115,22 +115,22 @@ NiuB_SI = NiuB * EV
 '''
   * Dirac Algebra 
 '''
-sigma_0 = np.array([
-    [1, 0],
-    [0, 1]
-], dtype='complex128')
-sigma_x = np.array([
-    [0, 1],
-    [1, 0]
-], dtype='complex128')
-sigma_y = np.array([
-    [0, -1j],
-    [1j,  0]
-], dtype='complex128')
-sigma_z = np.array([
-    [1,  0],
-    [0, -1]
-], dtype='complex128')
+# sigma_0 = np.array([
+#     [1, 0],
+#     [0, 1]
+# ], dtype='complex128')
+# sigma_x = np.array([
+#     [0, 1],
+#     [1, 0]
+# ], dtype='complex128')
+# sigma_y = np.array([
+#     [0, -1j],
+#     [1j,  0]
+# ], dtype='complex128')
+# sigma_z = np.array([
+#     [1,  0],
+#     [0, -1]
+# ], dtype='complex128')
 sigma0 = np.array([
     [1, 0],
     [0, 1]
@@ -149,7 +149,7 @@ sigmaz = np.array([
 ], dtype='complex128')
 
 sigma = np.array([
-    sigma_0, sigma_x, sigma_y, sigma_z
+    sigmax, sigmay, sigmaz
 ])
 
 levi_civita = np.array([

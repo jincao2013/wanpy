@@ -14,19 +14,19 @@ __date__ = "Nov. 5, 2019"
 import os
 import sys
 sys.path.append(os.environ.get('PYTHONPATH'))
-
 import numpy as np
-from numpy.linalg import multi_dot
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import matplotlib.path as mpath
 import matplotlib.patches as mpatches
 from matplotlib.pyplot import subplot
-from wanpy.core.toolkits import *
-import pandas as pd
 
-__all__ = ['plot_matrix', 'plot_matrix2', 'plot_grid', 'plot_grid2', 'plot_orbital',
-           'plot_band']
+__all__ = ['plot_matrix',
+           'plot_matrix2',
+           'plot_grid',
+           'plot_grid2',
+           'plot_orbital',
+           ]
 
 
 def plot_matrix(A, cmap='Reds'):
@@ -147,48 +147,48 @@ def plot_orbital(rr, un, grid, latt=None, cmap='Reds'):
     ax.axis('equal')
 
 
-def plot_band(band, eemin=-3.0, eemax=3.0, unit='D', xlabel=None, save_csv=False):
-    bandE = band['bandE']
-    bandU = band['bandU']
-    kpath = band['kpath']
-    kpath_list = band['kpath_HSP']
-    tbg = band['tbg']
-    BC = band['BC'] * 0.001
-    cmap = 'seismic'
-
-    nk, nw = bandE.shape
-    nline = kpath_list.shape[0] - 1
-    if unit.upper() == 'C':
-        kpath = multi_dot([tbg.lattG, kpath.T]).T
-    kpath = kmold(kpath)
-
-    if save_csv:
-        col_list = ['Band {}'.format(i+1) for i in range(nw)]
-        bandpd = pd.DataFrame(bandE, index=np.arange(nk)+1, columns=col_list)
-        bandpd.insert(loc=0, column='|k| (Ans-1)', value=kpath)
-        bandpd.to_csv(r'band.csv', float_format='% 10.5f', sep='\t', encoding='utf-8')
-
-
-    '''
-      * plot band
-    '''
-    G = gridspec.GridSpec(1, 1)
-    ax = subplot(G[0, 0])
-    ax.axis([kpath.min(), kpath.max(), eemin, eemax])
-    plt.axhline(0, color='k', linewidth=0.5)
-
-    for i in range(nw):
-        ax.plot(kpath, bandE[:, i], linewidth=1, linestyle="-", color='k', alpha=0.7)
-
-    for i in range(1, nline):
-        plt.axvline(x=kpath[i * nk//nline], linestyle='-', color='k', linewidth=0.5, alpha=1, zorder=2)
-
-    if xlabel is not None:
-        # xlabel = ['K', 'G', '-K', '-M', 'G', 'M', 'K']
-        num_xlabel = len(xlabel)
-        plt.xticks(kpath[np.arange(num_xlabel) * (nk // nline)],
-                   xlabel)
-
-    plt.tight_layout()
-    plt.show
-
+# def plot_band(band, eemin=-3.0, eemax=3.0, unit='D', xlabel=None, save_csv=False):
+#     bandE = band['bandE']
+#     bandU = band['bandU']
+#     kpath = band['kpath']
+#     kpath_list = band['kpath_HSP']
+#     tbg = band['tbg']
+#     BC = band['BC'] * 0.001
+#     cmap = 'seismic'
+#
+#     nk, nw = bandE.shape
+#     nline = kpath_list.shape[0] - 1
+#     if unit.upper() == 'C':
+#         kpath = multi_dot([tbg.lattG, kpath.T]).T
+#     kpath = kmold(kpath)
+#
+#     if save_csv:
+#         col_list = ['Band {}'.format(i+1) for i in range(nw)]
+#         bandpd = pd.DataFrame(bandE, index=np.arange(nk)+1, columns=col_list)
+#         bandpd.insert(loc=0, column='|k| (Ans-1)', value=kpath)
+#         bandpd.to_csv(r'band.csv', float_format='% 10.5f', sep='\t', encoding='utf-8')
+#
+#
+#     '''
+#       * plot band
+#     '''
+#     G = gridspec.GridSpec(1, 1)
+#     ax = subplot(G[0, 0])
+#     ax.axis([kpath.min(), kpath.max(), eemin, eemax])
+#     plt.axhline(0, color='k', linewidth=0.5)
+#
+#     for i in range(nw):
+#         ax.plot(kpath, bandE[:, i], linewidth=1, linestyle="-", color='k', alpha=0.7)
+#
+#     for i in range(1, nline):
+#         plt.axvline(x=kpath[i * nk//nline], linestyle='-', color='k', linewidth=0.5, alpha=1, zorder=2)
+#
+#     if xlabel is not None:
+#         # xlabel = ['K', 'G', '-K', '-M', 'G', 'M', 'K']
+#         num_xlabel = len(xlabel)
+#         plt.xticks(kpath[np.arange(num_xlabel) * (nk // nline)],
+#                    xlabel)
+#
+#     plt.tight_layout()
+#     plt.show
+#

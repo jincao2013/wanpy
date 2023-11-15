@@ -1,0 +1,200 @@
+#!/usr/bin/env python
+import sys
+import os
+import numpy as np
+import numpy.linalg as LA
+# from wanpy.core.structure import Cell
+from scipy.spatial.transform import Rotation as scipy_rot
+from phonopy.interface.calculator import read_crystal_structure
+import spglib
+
+__date__ = "Sep. 22, 2023"
+__version__ = "0.1.4"
+
+def read_magmoms(filename, num_atoms):
+    magmoms = np.zeros([num_atoms, 3], dtype='float64')
+    i = 0
+    with open(filename, 'r') as f:
+        for i in range(num_atoms):
+            magmoms[i] = np.array(f.readline().split(), dtype='float64')
+            # print(magmoms[i])
+    return magmoms
+
+def get_ntheta_from_rotmatrix(TR, tau, rot_car):
+    det = LA.det(rot_car)
+    u, v = LA.eigh(det * rot_car)
+
+    axis = v.T[np.argwhere(np.isclose(u, 1))[0,0]]
+    _theta = np.arccos((np.trace(det * rot_car) - 1)/2) # [0, pi]
+    nx, ny, nz = axis
+    taux, tauy, tauz = tau
+
+    symmop = None
+    for theta in [_theta, 2*np.pi-_theta]:
+        rot_car_test = det * scipy_rot.from_rotvec(theta * axis).as_matrix()
+        rot_car_test[np.abs(rot_car_test) < 1e-10] = 0
+        if np.isclose(rot_car, rot_car_test, atol=1e-05).all():
+            symmop = [TR, det, theta, nx, ny, nz, taux, tauy, tauz]
+            break
+
+    # if symmop is None:
+    #     print('error in get_ntheta_from_rotmatrix', det, theta/np.pi*180, axis)
+    # else:
+    #     print('get_ntheta_from_rotmatrix', det, theta/np.pi*180, axis)
+    # print(symmop)
+
+    return symmop
+
+def print_spg(cell_nonmag, latt, symprec=1e-5):
+    spg_symbol = spglib.get_spacegroup(cell_nonmag, symprec=symprec, angle_tolerance=-1.0, symbol_type=0)
+    info_spg = spglib.get_symmetry(cell_nonmag, symprec=symprec, angle_tolerance=-1.0, mag_symprec=-1.0)
+    info_spg_dataset = spglib.get_symmetry_dataset(cell_nonmag, symprec=symprec)
+    info_standard_spg = spglib.get_symmetry_from_database(info_spg_dataset.get('hall_number'))
+
+    pointgroup = info_spg_dataset.get('pointgroup')
+    rot = info_spg_dataset.get('rotations')
+    tau = info_spg_dataset.get('translations')
+    tau[np.abs(tau) < 1e-5] = 0
+    n_operations = rot.shape[0]
+    symmops = [get_ntheta_from_rotmatrix(0, tau[i], latt @ rot[i] @ LA.inv(latt)) for i in range(n_operations)]
+    # print(symmops)
+
+    print('-' * 100)
+    # print('  Space group')
+    print('  pointgroup: ', pointgroup)
+    print('  spacegroup: ', spg_symbol)
+    print('  n_operations: ', n_operations)
+    print('')
+
+    print('In axis-angle form:\n')
+    print('  det      alpha   alpha(deg)         nx        ny         nz       taux       tauy       tauz')
+    for i in range(n_operations):
+        _, _det, _theta, _nx, _ny, _nz, _taux, _tauy, _tauz = symmops[i]
+        print('{:>5d}{:11.6f} ({:6.0f} deg){:11.6f}{:11.6f}{:11.6f}{:11.6f}{:11.6f}{:11.6f}'.format(
+            int(np.rint(_det)), _theta, _theta/np.pi*180, _nx, _ny, _nz, _taux, _tauy, _tauz
+        ))
+    print('')
+
+    print('In rotation matrix form (fractional coordinates):')
+    for i in range(0, n_operations, 3):
+        num_print = 3 if (n_operations - i) // 3 else n_operations % 3
+        # print(i, num_print)
+
+        print('')
+        for j in range(num_print):
+            print('   {:10.6f}{:10.6f}{:10.6f}'.format(tau[i + j, 0], tau[i + j, 1], tau[i + j, 2]),
+                  end='')
+        print('')
+        for a in range(3):
+            for j in range(num_print):
+                print('   {:10.6f}{:10.6f}{:10.6f}'.format(
+                    rot[i + j, a, 0], rot[i + j, a, 1], rot[i + j, a, 2]
+                ), end='')
+            print('')
+    print('-' * 100)
+
+
+def print_msg(cell_mag, latt, symprec=1e-5):
+    info_mag = spglib.get_magnetic_symmetry(cell_mag, symprec=symprec, angle_tolerance=-1.0, mag_symprec=-1.0)
+    info_mag_dataset = spglib.get_magnetic_symmetry_dataset(cell_mag, symprec=symprec)
+    msg_symbol = spglib.get_magnetic_spacegroup_type(info_mag_dataset.get('uni_number'))
+    info_standard_msg = spglib.get_magnetic_symmetry_from_database(info_mag_dataset.get('uni_number'))
+
+    n_operations = info_mag_dataset.get('n_operations')
+    msg_type = info_mag_dataset.get('msg_type')
+    bns_number = msg_symbol.get('bns_number')
+    rot = info_mag_dataset.get('rotations')
+    tau = info_mag_dataset.get('translations')
+    tau[np.abs(tau) < 1e-5] = 0
+    TR = info_mag_dataset.get('time_reversals')
+    symmops = [get_ntheta_from_rotmatrix(TR[i], tau[i], latt @ rot[i] @ LA.inv(latt)) for i in range(n_operations)]
+
+    print('-' * 100)
+    # print('  Magnetic space group')
+    print('  msg_type: ', msg_type)
+    print('  bns_number: ', bns_number)
+    print('  n_operations: ', n_operations)
+    print('')
+
+    print('In axis-angle form:\n')
+    print('   TR  det      alpha   alpha(deg)         nx        ny         nz       taux       tauy       tauz')
+    for i in range(n_operations):
+        _TR, _det, _theta, _nx, _ny, _nz, _taux, _tauy, _tauz = symmops[i]
+        print('{:>5d}{:>5d}{:11.6f} ({:6.0f} deg){:11.6f}{:11.6f}{:11.6f}{:11.6f}{:11.6f}{:11.6f}'.format(
+            int(_TR), int(np.rint(_det)), _theta, _theta/np.pi*180, _nx, _ny, _nz, _taux, _tauy, _tauz
+        ))
+    print('')
+
+    print('In rotation matrix form (fractional coordinates):')
+    for i in range(0, n_operations, 3):
+        num_print = 3 if (n_operations - i) // 3 else n_operations % 3
+        # print(i, num_print)
+
+        # print('-' * 100)
+        print('')
+        for j in range(num_print):
+            print('{:>3d}{:10.6f}{:10.6f}{:10.6f}'.format(TR[i + j], tau[i + j, 0], tau[i + j, 1], tau[i + j, 2]),
+                  end='')
+        print('')
+        for a in range(3):
+            for j in range(num_print):
+                print('   {:10.6f}{:10.6f}{:10.6f}'.format(
+                    rot[i + j, a, 0], rot[i + j, a, 1], rot[i + j, a, 2]
+                ), end='')
+            print('')
+    print('-' * 100)
+
+
+if __name__ == "__main__":
+    usage = """
+    Usage: findmsg [-h] POSCAR [magmoms] [-t tolerance]
+"""
+    # print(sys.argv)
+    fname_poscar, fname_magmoms = None, None
+    if len(sys.argv) == 2:
+        fname_poscar = sys.argv[1]
+    elif len(sys.argv) == 3:
+        fname_poscar, fname_magmoms = sys.argv[1:]
+    else:
+        print(usage)
+        sys.exit()
+
+    try:
+        symprec = float(sys.argv[sys.argv.index('-t') + 1])
+    except ValueError:
+        symprec = 1e-5
+    print('- Symmetry search tolerance in the unit of length is: {:10.7f} Angstrom. '.format(symprec))
+
+    # os.chdir('/Users/jincao/Downloads/temp')
+    # fname_poscar, fname_magmoms = r'POSCAR', r'magmoms'
+
+    unitcell, optional_structure_info = read_crystal_structure(fname_poscar)
+    num_atoms = unitcell.get_number_of_atoms()
+    latt = unitcell.get_cell().T
+
+    cell_nonmag = (
+        unitcell.get_cell(),
+        # unitcell.get_positions(),
+        unitcell.get_scaled_positions(),
+        unitcell.get_atomic_numbers(),
+        np.zeros_like(unitcell.get_atomic_numbers()),
+    )
+
+    if fname_magmoms is not None:
+        magmoms = read_magmoms(fname_magmoms, num_atoms)
+        unitcell.set_magnetic_moments(magmoms)
+        cell_mag = (
+            unitcell.get_cell(),
+            # unitcell.get_positions(),
+            unitcell.get_scaled_positions(),
+            unitcell.get_atomic_numbers(),
+            unitcell.get_magnetic_moments(),
+        )
+
+    print('\n\nSpace group for non-magnetic structure:')
+    print_spg(cell_nonmag, latt, symprec=symprec)
+
+    if fname_magmoms is not None:
+        print('\n\nMagnetic space group for magnetic structure:')
+        print_msg(cell_mag, latt, symprec=symprec)
+        print('\n* TR = 1 is for operation with TR.')

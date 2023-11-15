@@ -11,22 +11,16 @@
 
 __date__ = "Aug. 23, 2019"
 
-
-import time
 import os
 import sys
-import getpass
-
+# import getpass
 import scipy.spatial
-
 sys.path.append(os.environ.get('PYTHONPATH'))
-
 import re
 import numpy as np
 import numpy.linalg as LA
-from scipy.io import FortranFile
-
-from wanpy.core.structure import Cell, Htb
+import fortio, scipy.io
+from wanpy.core.structure import Htb
 from wanpy.core.mesh import make_mesh
 from wanpy.core.toolkits import kmold
 
@@ -47,9 +41,7 @@ __all__ = ['W90_win',
 
 
 class W90(object):
-    '''
-    Wannier90 object
-    '''
+    """ Wannier90 object """
     def __init__(self):
 
         self.nb = None
@@ -94,41 +86,57 @@ class W90_chk(W90):
         self.nR, self.ndegen, self.gridR = None, None, None
 
     def load_from_w90(self, seedname=r'wannier90', verbose=False):
+        """
+          For reading Fortran unformatted binary file, see more in document of fortio:
+          https://github.com/syrte/fortio
+
+          Known issue in reading unformatted binary file using scipy.io.FortranFile:
+          1. https://www.mail-archive.com/wannier@lists.quantum-espresso.org/msg00178.html
+          2. https://stackoverflow.com/questions/53639058/reading-fortran-binary-file-in-python
+          3. https://numpy.org/doc/stable/reference/arrays.interface.html
+        """
         fname = seedname + '.chk'
         print('reading {}'.format(fname))
 
-        f = FortranFile('wannier90.chk', 'r')
+        # f = scipy.io.FortranFile(fname, 'r')
+        try:
+            f = fortio.FortranFile(fname, 'r', header_dtype='uint32', auto_endian=True, check_file=True)
+        except ValueError:
+            print('{} contains subrecords (e.g., records greater than 4GB), try to use signed header.'.format(fname))
+            f = fortio.FortranFile(fname, 'r', header_dtype='int32', auto_endian=True, check_file=True)
+
         self.header = f.read_record(dtype='|S33')[0]
-        self.nb = f.read_ints(dtype='int32')[0]
-        self.num_exclude_bands = f.read_ints(dtype='int32')[0]
-        self.exclude_bands = f.read_ints(dtype='int32')
-        self.latt = f.read_reals(dtype='float64').reshape(3, 3)
-        self.lattG = f.read_reals(dtype='float64').reshape(3, 3)
-        self.nk = f.read_ints(dtype='int32')[0]
-        self.mp_grid = f.read_ints(dtype='int32')
-        self.kpt_latt = f.read_reals(dtype='float64').reshape(self.nk, 3)
-        self.nntot = f.read_ints(dtype='int32')[0]
-        self.nw = f.read_ints(dtype='int32')[0]
+        self.nb = f.read_record(dtype='i4')[0]
+        self.num_exclude_bands = f.read_record(dtype='i4')[0]
+        self.exclude_bands = f.read_record(dtype='i4')
+        self.latt = f.read_record(dtype='f8').reshape(3, 3)
+        self.lattG = f.read_record(dtype='f8').reshape(3, 3)
+        self.nk = f.read_record(dtype='i4')[0]
+        self.mp_grid = f.read_record(dtype='i4')
+        self.kpt_latt = f.read_record(dtype='f8').reshape(self.nk, 3)
+        self.nntot = f.read_record(dtype='i4')[0]
+        self.nw = f.read_record(dtype='i4')[0]
         self.checkpoint = f.read_record(dtype='|S20')[0]
-        self.have_disentangled = f.read_record(dtype=np.bool)
+        self.have_disentangled = f.read_record(dtype="bool")
         nk, nb, nw = self.nk, self.nb, self.nw
         if self.have_disentangled[0]:
-            self.omega_invariant = f.read_reals(dtype='float64')
-            self.lwindow = f.read_ints(dtype='int32').reshape(nk, nb)
-            self.ndimwin = f.read_ints(dtype='int32')
-            self.u_matrix_opt = f.read_reals(dtype='complex128').reshape([nk, nw, nb])
+            self.omega_invariant = f.read_record(dtype='f8')
+            self.lwindow = f.read_record(dtype='i4').reshape(nk, nb)
+            self.ndimwin = f.read_record(dtype='i4')
+            self.u_matrix_opt = f.read_record(dtype='c16').reshape([nk, nw, nb])
             self.umat_dis = np.einsum('kwb->kbw', self.u_matrix_opt)
-        self.u_matrix = f.read_reals(dtype='complex128').reshape([nk, nw, nw])
+        self.u_matrix = f.read_record(dtype='c16').reshape([nk, nw, nw])
         self.umat = np.einsum('kwb->kbw', self.u_matrix)
-        self.m_matrix = f.read_reals(dtype='complex128').reshape([nk, self.nntot, nw, nw]) # Mmn(k,b)=<um,k|un,k+b>, index=(ik,nn,n,m)
-        self.wannier_centres = f.read_reals(dtype='float64').reshape([nw, 3])
-        self.wannier_spreads = f.read_reals(dtype='float64').reshape(nw)
+        self.m_matrix = f.read_record(dtype='c16').reshape([nk, self.nntot, nw, nw]) # Mmn(k,b)=<um,k|un,k+b>, index=(ik,nn,n,m)
+        self.wannier_centres = f.read_record(dtype='f8').reshape([nw, 3])
+        self.wannier_spreads = f.read_record(dtype='f8').reshape(nw)
 
-        self.vmat = np.einsum('kmi,kin->kmn', self.umat_dis, self.umat) # the line is definitely right
+        self.vmat = np.einsum('kmi,kin->kmn', self.umat_dis, self.umat) # this line is correct
 
         # calculate the Wigner-Seitz supercell
         print('creating the Wigner-Seitz supercell')
         self.nR, self.ndegen, self.gridR = self._init_ws_gridR(self.mp_grid, self.latt, verbose)
+        f.close()
 
     def _init_ws_gridR(self, ngridR, latt, verbose=False):
         return self._init_ws_gridR_opted(ngridR, latt, verbose=verbose)
@@ -548,7 +556,7 @@ class W90_nnkp(W90):
         self.latt = latt
         self.lattG = 2 * np.pi * LA.inv(self.latt.T)
 
-        self.kk = make_mesh(mp_grid, type='continuous', centersym=False, info=True)
+        self.kk = make_mesh(mp_grid, mesh_type='continuous', centersym=False, info=True)
         self.nk = self.kk.shape[0]
 
 
@@ -562,9 +570,15 @@ class W90_amn(W90):
         self.amn = None
 
     def reduce_into_outer_window(self, bloch_outer_win=None):
-        if bloch_outer_win != None:
+        if bloch_outer_win is not None:
             self.nb = bloch_outer_win[1] - bloch_outer_win[0]
             self.amn = self.amn[:, bloch_outer_win[0]:bloch_outer_win[1], :]
+
+    def twist_udud_to_uudd(self):
+        return np.einsum('knis->knsi', self.amn.reshape([self.nk, self.nb, self.nw//2, 2])).reshape([self.nk, self.nb, -1])
+
+    def twist_uudd_to_udud(self):
+        return np.einsum('knsi->knis', self.amn.reshape([self.nk, self.nb, 2, self.nw//2])).reshape([self.nk, self.nb, -1])
 
     def load_from_w90(self, fname=r'wannier90.amn'):
         with open(fname, 'r') as f:
@@ -607,7 +621,7 @@ class W90_mmn(W90):
         self.nnkptsG = None
 
     def reduce_into_outer_window(self, bloch_outer_win=None):
-        if bloch_outer_win != None:
+        if bloch_outer_win is not None:
             self.nb = bloch_outer_win[1] - bloch_outer_win[0]
             self.mmn = self.mmn[:, :, bloch_outer_win[0]:bloch_outer_win[1], bloch_outer_win[0]:bloch_outer_win[1]]
 
@@ -666,7 +680,7 @@ class W90_eig(W90):
         self.eig = np.zeros([nk, nb], dtype='float64')
 
     def reduce_into_outer_window(self, bloch_outer_win=None):
-        if bloch_outer_win != None:
+        if bloch_outer_win is not None:
             self.nb = bloch_outer_win[1] - bloch_outer_win[0]
             self.eig = self.eig[:, bloch_outer_win[0]:bloch_outer_win[1]]
 
@@ -896,7 +910,7 @@ class Wannier_setup(object):
                  bloch_outer_win=None,
                  seedname=r'wannier90',
                  ):
-        '''
+        """
           * Wannier_setup
             Input: H(k)
             Output: AMN, MMN, EIG used to build Wannier based Hamiltonian
@@ -905,7 +919,7 @@ class Wannier_setup(object):
           ** latt(np.ndarray dim(3,3)):  crystal parameters
           ** nb(int): num of band
           ** nw(int): num of wannier orbitals
-          ** grid(np.ndarray int dim(3)): Used to sample real space 
+          ** grid(np.ndarray int dim(3)): Used to sample real space
           ** gridG(np.ndarray float dim(nG,3)): Plane wave basis
           ** projections: np.array[
                 [n, l, m]
@@ -915,7 +929,7 @@ class Wannier_setup(object):
                 [x, y, z]
                 ...
              dtype='float64'] in axis of car.
-        '''  #
+        """
         # self.Ham = Tbg_MacDonald()
         # self.NNKP = W90_nnkp()
         self.Ham = Ham
@@ -941,7 +955,7 @@ class Wannier_setup(object):
         self.bloch_outer_win = bloch_outer_win
         self.seedname = seedname
 
-        if bloch_outer_win != None:
+        if bloch_outer_win is not None:
             self.nb_outwin = bloch_outer_win[1] - bloch_outer_win[0]
 
         # self.meshR, self.gridG, self.WSR, self.meshRws = self.init_grid(nmeshR, ngridG, nnWSR)
@@ -963,7 +977,7 @@ class Wannier_setup(object):
         # print('Number of nnk:   {:>4}'.format(self.NNKP.nnk))
         # print('Number of nnWSR:  {:>4}'.format(self.meshRws.shape[0]))
         print('Number of projector: {:>4} Number of Bloch bands: {:>4}'.format(self.nw, self.nb))
-        if self.bloch_outer_win != None:
+        if self.bloch_outer_win is not None:
             print('Outer window was used.')
             print('Number of Bloch bands in outer window: {:>4}({}:{})'.format(
                 self.nb_outwin, self.bloch_outer_win[0], self.bloch_outer_win[1])
@@ -1102,7 +1116,7 @@ class Wannier_setup(object):
         return AMN
 
     def get_gxx(self, ik, ib):
-        '''
+        """
           * metric matrix g_mn(k,k+b)
           ** jk = self.NNKP.nnkpts[ik, ib] - 1
           ** kc1 = self.meshkc[ik]
@@ -1112,7 +1126,7 @@ class Wannier_setup(object):
           ** bc = self.NNKP.bvecs[bc_index]
           ** bc = self.NNKP.nnbpts_car[ik, ib]
           ** bc = kc2 - kc1
-        ''' #
+        """
         return np.identity(self.nb)
 
     def get_wkm(self):
@@ -1125,11 +1139,11 @@ class Wannier_setup(object):
       ** gridG 
       ** FT 
     '''
-    def make_mesh(self, nmesh, type='continuous', centersym=False):
-        '''
+    def make_mesh(self, nmesh, mesh_type='continuous', centersym=False):
+        """
         * type = continuous, discrete
         * centersym = False, True
-        ''' #
+        """
         N1, N2, N3 = nmesh
         N = N1 * N2 * N3
         n2, n1, n3 = np.meshgrid(np.arange(N2), np.arange(N1), np.arange(N3))
@@ -1149,9 +1163,9 @@ class Wannier_setup(object):
     #     '''
     #       * meshR = meshRws.reshape(nnr, nrr, 3)[nnr//2]
     #     ''' #
-    #     meshR = self.make_mesh(nmeshR, type='continuous', centersym=False)
-    #     gridG = self.make_mesh(ngridG, type='discrete', centersym=True)
-    #     WSR = self.make_mesh(nnWSR, type='discrete', centersym=True)
+    #     meshR = self.make_mesh(nmeshR, mesh_type='continuous', centersym=False)
+    #     gridG = self.make_mesh(ngridG, mesh_type='discrete', centersym=True)
+    #     WSR = self.make_mesh(nnWSR, mesh_type='discrete', centersym=True)
     #
     #     nnr = WSR.shape[0]
     #     nrr = meshR.shape[0]
@@ -1164,9 +1178,9 @@ class Wannier_setup(object):
         # ny = 60 #int(self.nsuper**0.5 * 2)
         # nws = 1
         nmeshR = np.array([(2*nws+1)*nx, (2*nws+1)*ny, 1])
-        meshR = self.make_mesh(nmeshR, type='continuous', centersym=False) * (2*nws+1)
+        meshR = self.make_mesh(nmeshR, mesh_type='continuous', centersym=False) * (2*nws+1)
         meshR -= np.array([1, 1, 0], dtype='float64')
-        WSR = self.make_mesh([(2*nws+1), (2*nws+1), 1], type='discrete', centersym=True)
+        WSR = self.make_mesh([(2*nws+1), (2*nws+1), 1], mesh_type='discrete', centersym=True)
         return meshR, WSR
 
     def get_eiGR(self, gridG, meshR, signal=-1):
@@ -1205,11 +1219,11 @@ class Wannier_setup(object):
         return gpz
 
     def get_gauss_pz(self, rr, a=0.7):
-        '''
+        """
         ----------------
         borden=0.7~1.0 rr=(10,10,24)
         ----------------
-        '''  #
+        """
         a0 = 0.529
         borden = a0 * a
         z = rr[:, 2]
@@ -1221,9 +1235,9 @@ class Wannier_setup(object):
         return self.get_gauss_pz(rr)
 
     def get_2d_orbital_for_Hatomic(self, rr, n, l, m, scale_a0=1):
-        '''
+        """
         * reture 2d H atom orbitals in scale of a0
-        * to get a Morris scale orbital, rr should be 
+        * to get a Morris scale orbital, rr should be
         * replaced by rr - ro, a0 should be replaced by
         * a0 * scale_a0
 
@@ -1246,7 +1260,7 @@ class Wannier_setup(object):
         print('int R={}'.format((R21 * r **2).sum()*dr))
         print('int R={}'.format(R31.sum()*dr))
         print('int R={}'.format(R32.sum()*dr))
-        '''  #
+        """
         x, y, z = rr.T[0], rr.T[1], rr.T[2]
         r = LA.norm(rr, axis=1)
 
@@ -1473,14 +1487,6 @@ class W90_interpolation(object):
         self.vmat = np.einsum('kmi,kin->kmn', self.umat_dis, self.umat)
 
     def _init_ws_gridR(self, ngridR, latt):
-        '''
-        :param Rgrid:
-        :return:
-                nrpts: int
-                ndegen: list
-                irvec: [array([i1,i2,i3])]
-
-        '''
         # ***********
         # init
         # ***********
@@ -1586,10 +1592,10 @@ class W90_interpolation(object):
             self.r_Ramn[self.nR//2, 2] = np.diag(self.wcc.T[2])
 
     def interpolate_DR(self, eigD, i, name, tbgauge=False):
-        '''
+        """
           * interpolate symmetric operators D in R space
             eigD: eignvalues in eignstates representation
-        ''' #
+        """
         Dk_diag = np.array([
             np.diag(eigD[ik])
             for ik in range(self.nk)
@@ -1623,11 +1629,11 @@ class W90_interpolation(object):
         return Dk
 
     def svd_init_guess(self, amn):
-        '''
+        """
           * extract subspace of target bands from inital guess
             by make using of Lowdin's symmetric orthogonalization procedure.
             For entangled energy bands, using eq.23 [PRB 65 035109, 2001].
-        ''' #
+        """
         nk, nb, nw = amn.shape
         vmat = np.zeros([nk, nb, nw], dtype='complex128')
         for i in range(self.nk):
@@ -1641,7 +1647,7 @@ class W90_interpolation(object):
     #     w90intp.load_from_w90(ngridR)
     #     nk = w90intp.nk
     #     meshk = w90intp.meshk
-    #     R = make_mesh([3, 3, 1], type='discrete', centersym=True)
+    #     R = make_mesh([3, 3, 1], mesh_type='discrete', centersym=True)
     #     eikR = np.exp(2j * np.pi * np.einsum('ka,Ra->kR', meshk, R))
     #
     #     initwanWF = np.load(r'initwanWF.npz')

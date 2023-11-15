@@ -17,6 +17,7 @@ scripts_wanpy = [
     'scripts/wpy_set_fermi_eq_zero.py',
     'scripts/wpyplotband',
     'scripts/statistic_cores',
+    'scripts/findmsg',
 ]
 
 # to release package: python setup.py sdist
@@ -38,6 +39,6 @@ setup(
         "Operating System :: OS Independent",
     ],
     python_requires='>=3.6',
-    install_requires=['numpy', 'scipy', 'sympy', 'matplotlib', 'pandas', 'mpi4py', 'h5py'],
+    install_requires=['numpy', 'scipy', 'sympy', 'matplotlib', 'pandas', 'mpi4py', 'h5py', 'fortio'],
 )
 

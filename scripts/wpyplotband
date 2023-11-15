@@ -249,12 +249,16 @@ def plot_dft_band(cell, vaspeig, yy=[-1,1], HSP='G-G', fermi_dft=0, spin='all', 
     # bloch band
     if ispin == 2:
         if spin == 'all':
+            print('plotting both spin up (red) and dn (blue) band. ')
             plt.plot(kpath, band_1-fermi_dft, linewidth=1., linestyle="-", color='red', alpha=1.0)
             plt.plot(kpath, band_2-fermi_dft, linewidth=1., linestyle="-", color='blue', alpha=1.0)
+            # plt.legend(loc='best', fontsize=10, frameon=True, facecolor='white', edgecolor='k', framealpha=0)
         elif spin == 'up':
-            plt.plot(kpath, band_1-fermi_dft, linewidth=1., linestyle="-", color='black', alpha=1.0)
+            print('plotting spin up (red) band. ')
+            plt.plot(kpath, band_1-fermi_dft, linewidth=1., linestyle="-", color='red', alpha=1.0)
         elif spin == 'dn':
-            plt.plot(kpath, band_2-fermi_dft, linewidth=1., linestyle="-", color='black', alpha=1.0)
+            print('plotting spin dn (blue) band. ')
+            plt.plot(kpath, band_2-fermi_dft, linewidth=1., linestyle="-", color='blue', alpha=1.0)
         else:
             pass
     else:
@@ -294,10 +298,10 @@ def plot_wan_band(w90_band, savefig=False):
 
 # PYGUI = False
 
-if PYGUI:
-    wdir = os.path.join(ROOT_WDIR, 'wanpy_debug')
-else:
-    wdir = os.getcwd()
+# if PYGUI:
+#     wdir = os.path.join(ROOT_WDIR, 'wanpy_debug')
+# else:
+wdir = os.getcwd()
 
 if __name__ == '__main__':
     os.chdir(wdir)
@@ -311,49 +315,49 @@ if __name__ == '__main__':
         fermi_wan = None
     print('dft fermi level: {}'.format(fermi_dft))
 
-    if PYGUI:
-        '''
-          * Job list
-          ** dft
-          ** wan
-          ** compare
-        '''
-        Job = 'compare'
-        seedname = 'wannier90.up'
-        yy = [-0.6, 0.6]
-        HSP = 'G-X-M-X1-G-Y-X1-G-F-F1-Z-G-Z-I1-K1-Z-G-X-K1-G'
-        fermi_dft = 4.46843632 if fermi_dft is None else fermi_dft
-        fermi_wan = fermi_dft if fermi_wan is None else fermi_wan
-        spin = 'up'
-        savefig = False
-    else:
-        argv = sys.argv[1:]
+    # if PYGUI:
+    #     # '''
+    #     #   * Job list
+    #     #   ** dft
+    #     #   ** wan
+    #     #   ** compare
+    #     # '''
+    #     # Job = 'compare'
+    #     # seedname = 'wannier90.up'
+    #     # yy = [-0.6, 0.6]
+    #     # HSP = 'G-X-M-X1-G-Y-X1-G-F-F1-Z-G-Z-I1-K1-Z-G-X-K1-G'
+    #     # fermi_dft = 4.46843632 if fermi_dft is None else fermi_dft
+    #     # fermi_wan = fermi_dft if fermi_wan is None else fermi_wan
+    #     # spin = 'up'
+    #     # savefig = False
+    # else:
+    argv = sys.argv[1:]
 
-        usage = "wpyplotband -j [compare|dft|wan] --spin [1|up|dn] --seedname wannier90 -y '-1 1' -e 0 -w 0 -K 'G-G' "
-        parser = OptionParser(usage)
-        parser.add_option("--seedname", action="store", dest="seedname", default=None)
-        parser.add_option("-j", "--job", action="store", choices=['dft', 'wan', 'compare'], dest="job", default='dft')
-        parser.add_option("-y", "--yy", action="store", type="string", dest="yy", default=r'-5 5')
-        parser.add_option("-e", "--fermi", action="store", type="float", dest="fermi_dft", default=fermi_dft)
-        parser.add_option("-w", "--fermiwan", action="store", type="float", dest="fermi_wan", default=fermi_wan)
-        parser.add_option("-K", "--hsp", action="store", type="string", dest="HSP", default="G-G")
-        parser.add_option("--spin", action="store", choices=['all', 'up', 'dn'], dest="spin", default="all")
-        parser.add_option("-o", "--save", action="store_true", dest="savefig", default=False)
+    usage = "wpyplotband -j [compare|dft|wan] --spin [1|up|dn] --seedname wannier90 -y '-1 1' -e 0 -w 0 -K 'G-G' "
+    parser = OptionParser(usage)
+    parser.add_option("--seedname", action="store", dest="seedname", default=None)
+    parser.add_option("-j", "--job", action="store", choices=['dft', 'wan', 'compare'], dest="job", default='dft')
+    parser.add_option("-y", "--yy", action="store", type="string", dest="yy", default=r'-5 5')
+    parser.add_option("-e", "--fermi", action="store", type="float", dest="fermi_dft", default=fermi_dft)
+    parser.add_option("-w", "--fermiwan", action="store", type="float", dest="fermi_wan", default=fermi_wan)
+    parser.add_option("-K", "--hsp", action="store", type="string", dest="HSP", default="G-G")
+    parser.add_option("--spin", action="store", choices=['all', 'up', 'dn'], dest="spin", default="all")
+    parser.add_option("-o", "--save", action="store_true", dest="savefig", default=False)
 
-        options, args = parser.parse_args(argv)
+    options, args = parser.parse_args(argv)
 
-        Job = options.job
-        yy = np.array(options.yy.split(), dtype='float64')
-        HSP = options.HSP
-        nline = len(HSP.split('-')) - 1
-        fermi_dft = options.fermi_dft
-        fermi_wan = options.fermi_wan
-        spin = options.spin
-        seedname = options.seedname
-        if seedname is None:
-            seedname = {'all':'wannier90', 'up':'wannier90.up', 'dn':'wannier90.dn'}.get(spin)
+    Job = options.job
+    yy = np.array(options.yy.split(), dtype='float64')
+    HSP = options.HSP
+    nline = len(HSP.split('-')) - 1
+    fermi_dft = options.fermi_dft
+    fermi_wan = options.fermi_wan
+    spin = options.spin
+    seedname = options.seedname
+    if seedname is None:
+        seedname = {'all': 'wannier90', 'up': 'wannier90.up', 'dn': 'wannier90.dn'}.get(spin)
 
-        savefig = options.savefig
+    savefig = options.savefig
 
     if os.path.exists(seedname+'.wout'):
         HSP = load_HSP_from_wout(seedname)

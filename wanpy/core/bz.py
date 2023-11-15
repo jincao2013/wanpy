@@ -24,6 +24,7 @@ from scipy import special
 '''
 def fermi_dirac_func(E, smear=0, ismear=0):
     """
+    smear = Kb*T = beta^-1
     ismear = -1: Fermi-Dirac function
     ismear = 0: Gauss error function
     ismear >= 1: Methfessel-Paxton smearing
@@ -55,8 +56,9 @@ def fermi_dirac_func(E, smear=0, ismear=0):
 
 def delta_func(E, smear=0.01, ismear=0):
     """
+    smear = Kb*T = beta^-1
     ismear = -2: Lorentzian function
-    ismear = -1: derivation of Fermi-Dirac function
+    ismear = -1: derivation of Fermi-Dirac function: -(df/dE)
     ismear = 0: Gauss function
     ismear >= 1: Methfessel-Paxton smearing
     """
@@ -64,7 +66,8 @@ def delta_func(E, smear=0.01, ismear=0):
         x = E / smear
         delta = np.exp(-0.5 * x ** 2) / np.sqrt(2 * np.pi) / smear
     elif ismear == -1:
-        pass
+        x = E / smear / 2
+        delta = 0.25 * np.cosh(x)**-2 / smear
     elif ismear == -2:
         x = E / smear
         delta = smear / np.pi / (smear ** 2 + x ** 2)

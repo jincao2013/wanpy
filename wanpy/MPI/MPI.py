@@ -76,7 +76,7 @@ def MPI_Reduce(MPI, iterprint=100, dtype='float64', mpinote=False):
                 if mpinote:
                     pass
                 if i % iterprint != 0: continue
-                print('[Rank {:<2d} {:>6d}/{:<6d}] {} Calculated k at ({:.5f} {:.5f} {:.5f})'.format(
+                print('[Rank {:<4d} {:>6d}/{:<6d}] {} Calculated k at ({:.5f} {:.5f} {:.5f})'.format(
                     MPI_rank, i, nk_list[MPI_rank],
                     time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
                     k[0], k[1], k[2]
@@ -144,7 +144,7 @@ def MPI_Gather(MPI, iterprint=100, dtype='float64', mpinote=False):
                 if mpinote:
                     pass
                 if i % iterprint != 0: continue
-                print('[Rank {:<2d} {:>6d}/{:<6d}] {} Calculated k at ({:.5f} {:.5f} {:.5f})'.format(
+                print('[Rank {:<4d} {:>6d}/{:<6d}] {} Calculated k at ({:.5f} {:.5f} {:.5f})'.format(
                     MPI_rank, i, nk_list[MPI_rank],
                     time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
                     k[0], k[1], k[2]
