@@ -9,7 +9,7 @@ from scipy.spatial.transform import Rotation as scipy_rot
 from phonopy.interface.calculator import read_crystal_structure
 
 __date__ = "Sep. 22, 2023"
-__version__ = "0.1.4"
+__version__ = "0.1.5"
 
 def read_magmoms(filename, num_atoms):
     magmoms = np.zeros([num_atoms, 3], dtype='float64')
@@ -22,9 +22,9 @@ def read_magmoms(filename, num_atoms):
 
 def get_ntheta_from_rotmatrix(TR, tau, rot_car):
     det = LA.det(rot_car)
-    u, v = LA.eigh(det * rot_car)
+    u, v = LA.eig(det * rot_car)
 
-    axis = v.T[np.argwhere(np.isclose(u, 1))[0,0]]
+    axis = np.real(v.T[np.argwhere(np.isclose(u, 1))[0,0]])
     _theta = np.arccos((np.trace(det * rot_car) - 1)/2) # [0, pi]
     nx, ny, nz = axis
     taux, tauy, tauz = tau
@@ -57,7 +57,10 @@ def print_spg(cell_nonmag, latt, symprec=1e-5):
     tau[np.abs(tau) < 1e-5] = 0
     n_operations = rot.shape[0]
     symmops = [get_ntheta_from_rotmatrix(0, tau[i], latt @ rot[i] @ LA.inv(latt)) for i in range(n_operations)]
-    # print(symmops)
+    for i in rot:
+        print(latt @ i @ LA.inv(latt))
+    for i in symmops:
+        print(i)
 
     print('-' * 100)
     # print('  Space group')
@@ -107,7 +110,7 @@ def print_msg(cell_mag, latt, symprec=1e-5):
     tau = info_mag_dataset.get('translations')
     tau[np.abs(tau) < 1e-5] = 0
     TR = info_mag_dataset.get('time_reversals')
-    symmops = [get_ntheta_from_rotmatrix(TR[i], tau[i], latt @ rot[i] @ LA.inv(latt)) for i in range(n_operations)]
+    symmops = [get_ntheta_from_rotmatrix(int(TR[i]), tau[i], latt @ rot[i] @ LA.inv(latt)) for i in range(n_operations)]
 
     print('-' * 100)
     # print('  Magnetic space group')

@@ -20,13 +20,14 @@ import re
 sys.path.append(os.environ.get('PYTHONPATH'))
 
 # from collections import defaultdict
+import spglib
 from enum import Enum, unique
 import numpy as np
 from numpy import linalg as LA
 # from scipy.spatial import distance_matrix
-# from wanpy.core.units import *
+from wanpy.core.units import *
 from wanpy.core.mesh import make_mesh
-
+from wanpy.core.utils import get_ntheta_from_rotmatrix, print_symmops
 import h5py
 
 
@@ -227,13 +228,43 @@ class Cell(object):
         self.spec = hdf5_read_dataset(cell, 'spec', default=[])
         f.close()
 
-    def get_spglib_cell(self):
-        lattice = self.lattice.T
-        positions = self.ions
-        numbers = [1] * self.N
-        magmoms = [0] * self.N
-        cell = (lattice.tolist(), positions.tolist(), numbers, magmoms)
+    def get_spglib_cell(self, magmoms=None):
+        if magmoms is None:
+            magmoms = np.zeros_like(self.ions)
+        cell = (self.lattice.T, self.ions, [periodic_table.get(i) for i in self.spec], magmoms)
         return cell
+
+    def get_msg(self, magmoms, symprec=1e-5, info=False):
+        cell_mag = self.get_spglib_cell(magmoms)
+        latt = self.lattice
+
+        info_mag = spglib.get_magnetic_symmetry(cell_mag, symprec=symprec, angle_tolerance=-1.0, mag_symprec=-1.0)
+        info_mag_dataset = spglib.get_magnetic_symmetry_dataset(cell_mag, symprec=symprec)
+        msg_symbol = spglib.get_magnetic_spacegroup_type(info_mag_dataset.get('uni_number'))
+        info_standard_msg = spglib.get_magnetic_symmetry_from_database(info_mag_dataset.get('uni_number'))
+
+        n_operations = info_mag_dataset.get('n_operations')
+        msg_type = info_mag_dataset.get('msg_type')
+        bns_number = msg_symbol.get('bns_number')
+        rot = info_mag_dataset.get('rotations')
+        tau = info_mag_dataset.get('translations')
+        tau[np.abs(tau) < 1e-5] = 0
+        TR = info_mag_dataset.get('time_reversals')
+        symmops = np.array([get_ntheta_from_rotmatrix(int(TR[i]), tau[i], latt @ rot[i] @ LA.inv(latt)) for i in range(n_operations)])
+
+        if info:
+            print('\n\nMagnetic space group for magnetic structure (symprec:{:10.7f} Angstrom)'.format(symprec))
+            print('-' * 100)
+            # print('  Magnetic space group')
+            print('  msg_type: ', msg_type)
+            print('  bns_number: ', bns_number)
+            print('  n_operations: ', n_operations)
+            print('')
+            print_symmops(symmops)
+            print('-' * 100)
+            print('')
+
+        return symmops
 
     def printer(self, site=True):
         lattice = self.lattice
@@ -1110,7 +1141,6 @@ class Htb(object):
             if if_uudd_amn:
                 print('\033[0;31m.amn is not in order of uudd \033[0m')
                 print('\033[0;31mone may use twist_amn` to twist the .amn file into the uudd order, and then perform the disentanglement process again.  \033[0m')
-                print('')
 
         return wcc, wccf
 

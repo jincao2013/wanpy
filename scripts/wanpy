@@ -15,46 +15,68 @@ import time
 import os
 import sys
 import numpy as np
-from optparse import OptionParser
+import argparse
 # sys.path.append(os.environ.get('PYTHONPATH'))
-from wanpy.env import __version__
-from wanpy.core.errorhandler import CommandNotFoundError
 
-
-def h5htb(argv):
-    usage = """wanpy htb [options]
-gather wannier tight-binding informations into a single .h5 file 
-"""
-
+def handle_wannier(args):
     import re
-    from wanpy.core.structure import Htb
-    from wanpy.core.symmetry import Symmetrize_Htb, get_proj_info, read_symmetry_inputfile
+    from wanpy.core.structure import Cell
+    from wanpy.interface.buildwannier import WannierInterpolation
+    from wanpy.core.symmetry import parse_symmetry_inputfile
 
-    if os.path.exists('vasprun.xml'):
-        fermi_vasprun = float(re.findall('.\d+.\d+', os.popen('grep efermi vasprun.xml').readline())[0])
-    else:
-        fermi_vasprun = 0.0
+    if args.write_temp:
+        with open('symmetry.in', 'w') as f:
+            f.write(temp_input_file)
+        f.close()
+        return
 
-    parser = OptionParser(usage)
-    parser.add_option("-e", "--efermi", action="store", type="float", dest="fermi", default=fermi_vasprun,
-                      help='fermi level')
-    parser.add_option("--seedname", action="store", type="str", dest="seedname", default='wannier90')
-    parser.add_option('--symmetry', action="store_true", dest="symmetry",
-                      help="if symmetrizing wannier tb, default is False")
-    # parser.add_option("-t", "--type", action="store", type="str", dest="storetype", default='h5')
-    parser.add_option('--wsvec', action="store_true", dest="load_wsvec",
-                      help="if load wannier90_wsvec.dat, default is False")
+    efermi = args.efermi
+    if args.efermi is None:
+        fermi = 0.0
+        if os.path.exists('vasprun.xml'):
+            fermi = float(re.findall('.\d+.\d+', os.popen('grep efermi vasprun.xml').readline())[0])
+            print('fermi level is {} readed from vasprun.xml'.format(fermi))
 
-    options, args = parser.parse_args(argv)
+    if args.cal_spin:
+        print('WAVECAR will be used for interpolating spin operator.')
 
-    fermi = options.fermi
-    seedname = options.seedname
-    symmetric_htb = options.symmetry
-    load_wsvec = options.load_wsvec
-    # storetype = options.storetype
+    T0 = time.time()
+    ngridR_symmhtb, symmops = None, None
+    if args.symmetry:
+        win = parse_symmetry_inputfile('symmetry.in')
+        ngridR_symmhtb, symmops = win.ngridR, win.symmops
+        if win.parse_symmetry == 'auto':
+            print('Using magmoms to determine msg, the following msg is found: ')
+            cell = Cell()
+            cell.load_poscar('POSCAR')
+            symmops = cell.get_msg(win.magmoms, win.symprec, info=True)
+    wanrun = WannierInterpolation(fermi, seedname=args.seedname,
+                                  symmetric_htb=args.symmetry, ngridR_symmhtb=ngridR_symmhtb, symmops=symmops,
+                                  uudd_amn=True,
+                                  verbose=args.verbose
+                                  )
+    wanrun.run(cal_r=args.cal_r, cal_spin=args.cal_spin,
+               write_h5=True, write_dat=args.write_dat, write_spn=args.write_spn,
+               decimals=args.decimals
+               )
+    T1 = time.time()
+
+    print('Wannier interpolation completed, time consuming {:.3f} s'.format(T1-T0))
+
+def handle_htb(args):
+    import re
+    from wanpy.core.structure import Htb, Cell
+    from wanpy.core.symmetry import Symmetrize_Htb, get_proj_info, parse_symmetry_inputfile
+
+    efermi = args.efermi
+    if args.efermi is None:
+        fermi = 0.0
+        if os.path.exists('vasprun.xml'):
+            fermi = float(re.findall('.\d+.\d+', os.popen('grep efermi vasprun.xml').readline())[0])
+            print('fermi level is {} readed from vasprun.xml'.format(fermi))
 
     # print instructions
-    print('You should check wcc before used for calculations.')
+    print('One should check wcc before used for calculations.')
     print('Make sure the following setting in wannier90: ')
     print('guiding_centres      =  T')
     print('translate_home_cell  =  F (it may shift the wcc with a lattice, which is far away from the inital projections)')
@@ -64,14 +86,20 @@ gather wannier tight-binding informations into a single .h5 file
     htb = Htb(fermi)
 
     T0 = time.time()
-    htb.load_wannier90_dat(seedname=seedname, load_wsvec=load_wsvec, uudd_amn=True)
+    htb.load_wannier90_dat(seedname=args.seedname, load_wsvec=args.load_wsvec, uudd_amn=True)
     T1 = time.time()
-    print('complete loading hamiltonian from {}, time consuming {:.3f} s'.format(seedname, T1-T0))
+    print('complete loading hamiltonian from {}, time consuming {:.3f} s'.format(args.seedname, T1-T0))
 
     # symmetric wannier htb
-    if symmetric_htb:
+    if args.symmetry:
         print('symmetrizing wannier tb')
-        ngridR_symmhtb, symmops = read_symmetry_inputfile('symmetry.in')
+        win = parse_symmetry_inputfile('symmetry.in')
+        ngridR_symmhtb, symmops = win.ngridR, win.symmops
+        if win.parse_symmetry == 'auto':
+            print('Using magmoms to determine msg, the following msg is found: ')
+            cell = Cell()
+            cell.load_poscar('POSCAR')
+            symmops = cell.get_msg(win.magmoms, win.symprec, info=True)
         atoms_pos, atoms_orbi = get_proj_info(htb=htb)
         symmhtb = Symmetrize_Htb(ngridR=ngridR_symmhtb,
                                  htb=htb,
@@ -93,144 +121,26 @@ gather wannier tight-binding informations into a single .h5 file
     T2 = time.time()
     print('h5htb complete, time consuming {:.3f} s'.format(T2-T0))
 
-def wannier(argv):
-    import re
-    from wanpy.interface.buildwannier import WannierInterpolation
+# def handle_wannier(args):
+#     print(args)
+#
+# def handle_htb(args):
+#     print(args)
 
-    usage = 'wanpy wannier [options] \n\n' + \
-            'wanpy.interface.buildwannier.WannierInterpolation:\n' + \
-            WannierInterpolation.__doc__
-    if os.path.exists('vasprun.xml'):
-        fermi_vasprun = float(re.findall('.\d+.\d+', os.popen('grep efermi vasprun.xml').readline())[0])
-        print('fermi level is {} readed from vasprun.xml'.format(fermi_vasprun))
-    else:
-        fermi_vasprun = 0.0
-
-
-    parser = OptionParser(usage)
-    parser.add_option("-e", "--efermi", action="store", type="float", dest="fermi", default=fermi_vasprun,
-                      help='fermi level, default is readed from vasprun.xml, or zero if there is no vasprun.xml')
-    parser.add_option("--seedname", action="store", type="str", dest="seedname", default='wannier90',
-                      help="default is wannier90")
-    parser.add_option('--symmetry', action="store_true", dest="symmetry",
-                      help="if symmetrizing wannier tb, default is False")
-    parser.add_option("-r", '--ramn', action="store_true", dest="cal_r",
-                      help="if interpolat r operator, default is False")
-    parser.add_option("-v", '--verbose', action="store_true", dest="verbose",
-                      help="be moderately verbose")
-    parser.add_option("-s", '--spin', action="store_true", dest="cal_spin",
-                      help="if interpolat spin operator, default is False")
-    parser.add_option('--spn', action="store_true", dest="write_spn",
-                      help="if write .spn file (formated), default is False")
-    parser.add_option('--dat', action="store_true", dest="write_dat",
-                      help="if write .dat file (formated), default is False")
-    parser.add_option('--decimal', action="store", type="int", dest="decimals", default=16,
-                      help="save .h5 with rounded double precision, default decimals is 16")
-
-    options, args = parser.parse_args(argv)
-
-    fermi = options.fermi
-    seedname = options.seedname
-    verbose = options.verbose
-    symmetric_htb = options.symmetry
-    cal_r = options.cal_r
-    cal_spin = options.cal_spin
-    write_spn = options.write_spn
-    write_dat = options.write_dat
-    decimals = options.decimals
-    # storetype = options.storetype
-
-    if cal_spin:
-        print('WAVECAR will be used for interpolating spin operator.')
-
-    T0 = time.time()
-    wanrun = WannierInterpolation(fermi, seedname=seedname,
-                                  symmetric_htb=symmetric_htb, symmetry_inputfile='symmetry.in',
-                                  uudd_amn=True,
-                                  verbose=verbose)
-    # wanrun.run(cal_r=True, cal_spin=cal_spin, write_htb=True, write_spn=write_spn)
-    wanrun.run(cal_r=cal_r, cal_spin=cal_spin, write_h5=True, write_dat=write_dat,
-               write_spn=write_spn, decimals=decimals)
-    T1 = time.time()
-
-    print('Wannier interpolation completed, time consuming {:.3f} s'.format(T1-T0))
-
-def set_w90eig_fermi_eq_zero(argv):
-    usage = '''wanpy set_w90eig_fermi_eq_zero [-h] [-e fermi_level] [-f fname_of_w90amn]
-    
-Shift the Fermi level of wannier90.eig to zero. 
-The Fermi level is loaded from vasprun.xml if not specified, 
-and the resulting .eig will restored with name `wannier90.eig.zero`.
-    '''
-
-    import re
-    from wanpy.interface.wannier90 import W90_eig
-
-    fermi_vasp = float(re.findall('.\d+.\d+', os.popen('grep efermi vasprun.xml').readline())[0])
-
-    parser = OptionParser(usage)
-    parser.add_option("-e", "--efermi", action="store", type="float", dest="fermi", default=fermi_vasp)
-    parser.add_option("-f", "--fname", action="store", type="string", dest="fname", default='wannier90.eig')
-
-    options, args = parser.parse_args(argv)
-
-    fermi = options.fermi
-    fname = options.fname
-
-    savefname = r'wannier90.eig.zero'
-    with open('wannier90.amn', 'r') as f:
-        f.readline()
-        nb, nk, nw = np.array(f.readline().split(), dtype='int64')
-    # nb, nk, nw = read_par()
-    EIG = W90_eig(nb, nk)
-    EIG.load_from_w90(fname)
-    EIG.eig -= fermi
-    EIG.save_w90(savefname)
-
-    print('Fermi level have been set at 0 eV by adjusting')
-    print('E(wannier) = E(DFT) - ({}) eV'.format(fermi))
-
-def write_dat(argv):
-    usage = '''wanpy write_dat [-h] [-n fname_of_h5] [--decimal precision] [-r if save _r.dat]
-'''
-
+def handle_write_dat(args):
     from wanpy.core.structure import Htb
 
-    parser = OptionParser(usage)
-    parser.add_option("-n", "--name", action="store", type="str", dest="htb_fname", default='htb.h5',
-                      help="default is htb.h5")
-    parser.add_option('--decimal', action="store", type="int", dest="decimals", default=10,
-                      help="save .dat with rounded values, default decimals is 10")
-    parser.add_option("-r", '--ramn', action="store_true", dest="save_r",
-                      help="if write _r.dat, default is False")
-
-    options, args = parser.parse_args(argv)
-
-    htb_fname = options.htb_fname
-    decimal = options.decimal
-    save_r = options.save_r
-
-    fmt = str(6+decimal) + '.' + str(decimal)
+    fmt = str(6+args.decimal) + '.' + str(args.decimal)
     htb = Htb()
-    htb.load_h5(htb_fname)
+    htb.load_h5(args.htb_fname)
     htb.save_wannier90_hr_dat(fmt=fmt)
-    if save_r:
+    if args.save_r:
         htb.save_wannier90_r_dat(fmt=fmt)
 
-def twist_amn(argv):
-    usage = '''wanpy twist_amn [-h] [-t udud_to_uudd or uudd_to_udud]
-'''
-
+def handle_twist_amn(args):
     from wanpy.interface.wannier90 import W90_amn
 
-    parser = OptionParser(usage)
-    parser.add_option("-t", "--type", action="store", type="str", dest="twist_type", default='udud_to_uudd',
-                      help="default is udud_to_uudd")
-    options, args = parser.parse_args(argv)
-
-    twist_type = options.twist_type
-
-    if twist_type == 'udud_to_uudd':
+    if args.twist_type == 'udud_to_uudd':
         os.rename('wannier90.amn', 'wannier90_udud.amn')
         print('found wannier90.amn')
         print('this will twist .amn order from udud to uudd')
@@ -239,7 +149,7 @@ def twist_amn(argv):
         AMN.amn = np.einsum('knis->knsi', AMN.amn.reshape([AMN.nk, AMN.nb, AMN.nw // 2, 2])).reshape([AMN.nk, AMN.nb, -1])
         AMN.save_w90('wannier90_uudd.amn')
         os.system('ln -s wannier90_uudd.amn wannier90.amn')
-    elif twist_type == 'uudd_to_udud':
+    elif args.twist_type == 'uudd_to_udud':
         os.rename('wannier90.amn', 'wannier90_uudd.amn')
         print('found wannier90.amn')
         print('this will twist .amn order from uudd to udud')
@@ -250,50 +160,81 @@ def twist_amn(argv):
         os.system('ln -s wannier90_uudd.amn wannier90.amn')
 
 def main():
-    usage = """
-Usage: wanpy [-h] [-V] [options] ...
+    # fermi_vasprun = 0
 
-Options: 
-  -h, --help            show this help message and exit
-  -V                    show wanpy version
-  --temp                generate symmetry.in for wanpy
-  htb                   gather wannier tb data POSCAR .wout _hr.dat [_r.dat _spin.dat _wsvec.dat .nnkp]
-                        into a single .h5 file,
-                        [...] are optional.                             (use wanpy htb -h for details)
-  wannier               get wannier tb model from .chk .eig .wout .nnkp (use wanpy wannier -h for details)
-  write_dat             write _ht.dat, _r.dat files from .h5            (use wanpy write_dat -h for details)
-  twist_amn             twist .amn in uudd or udud order                (use wanpy twist_amn -h for details)
-    """
-    job_list = ['-h', '--help', '-V', '--temp',
-                'htb',
-                'wannier',
-                'set_w90eig_fermi_eq_zero',
-                'write_dat',
-                'twist_amn',
-                ]
-    # print(job_list)
+    parser = argparse.ArgumentParser(description='wanpy code')
+    subparsers = parser.add_subparsers(dest='command')
 
-    if len(sys.argv) == 1:
-        print(usage)
-        exit()
+    ''' Subparser for the wannier command '''
+    wannier_parser = subparsers.add_parser('wannier', help='wanpy wannier [options]', epilog='')
+    wannier_parser.add_argument('-e', '--efermi', action='store', type=float, default=None,
+                                help='fermi level, default is readed from vasprun.xml, or zero if there is no vasprun.xml')
+    wannier_parser.add_argument('--seedname', action='store', type=str, default='wannier90',
+                                help='default is wannier90')
+    wannier_parser.add_argument('--symmetry', action='store_true', dest='symmetry',
+                                help='if symmetrizing wannier tb, default is False')
+    wannier_parser.add_argument('-r', '--ramn', action='store_true', dest='cal_r',
+                                help='if interpolat r operator, default is False')
+    wannier_parser.add_argument('--verbose', action='store_true', dest="verbose",
+                                help='be moderately verbose')
+    wannier_parser.add_argument('--spin', action='store_true', dest='cal_spin',
+                                help='if interpolat spin operator, default is False')
+    wannier_parser.add_argument('--spn', action='store_true', dest='write_spn',
+                                help='if write .spn file (formated), default is False')
+    wannier_parser.add_argument('--dat', action='store_true', dest='write_dat',
+                                help='if write .dat file (formated), default is False')
+    wannier_parser.add_argument('--decimal', action='store', type=int, dest='decimals', default=16,
+                                help='save .h5 with rounded double precision, default decimals is 16')
+    wannier_parser.add_argument('--temp', action='store_true', dest='write_temp',
+                                help='write a templet symmetry.in file, default is False')
 
-    job = sys.argv[1]
-    argv = sys.argv[2:]
+    ''' Subparser for the htb command '''
+    htb_parser = subparsers.add_parser('htb', help='wanpy htb [options]')
+    htb_parser.add_argument('-e', '--efermi', action='store', type=float, default=None,
+                            help='fermi level, default is readed from vasprun.xml, or zero if there is no vasprun.xml')
+    htb_parser.add_argument('--seedname', action='store', type=str, default='wannier90')
+    htb_parser.add_argument('--symmetry', action='store_true', dest='symmetry',
+                            help='if symmetrizing wannier tb, default is False')
+    htb_parser.add_argument('--wsvec', action='store_true', dest='load_wsvec',
+                            help='if load wannier90_wsvec.dat, default is False')
 
-    if job not in job_list:
-        raise CommandNotFoundError('wanpy {}'.format(job))
+    ''' Subparser for the write_dat command '''
+    write_dat_parser = subparsers.add_parser('write_dat', help='wanpy write_dat [options]')
+    write_dat_parser.add_argument('-n', '--name', action='store', type=str, dest='htb_fname', default='htb.h5',
+                                  help='fname of .h5, default is htb.h5')
+    write_dat_parser.add_argument('--decimal', action='store', type=int, dest='decimals', default=10,
+                                  help='save .dat with rounded values, default decimals is 10')
+    write_dat_parser.add_argument('-r', '--ramn', action='store_true', dest='save_r',
+                                  help='if write _r.dat, default is False')
 
-    if job in ['-h', '--help']:
-        print(usage)
-        exit()
+    ''' Subparser for the twist_amn command '''
+    twist_amn_parser = subparsers.add_parser('twist_amn', help='wanpy twist_amn [options]')
+    twist_amn_parser.add_argument('-t', '--type', action='store', type=str, dest='twist_type', default='udud_to_uudd',
+                                  help='default is udud_to_uudd')
 
-    if job == '-V':
-        print('wanpy {}'.format(__version__))
-        exit()
+    args = parser.parse_args()
 
-    if job == '--temp':
-        temp_input = """
-ngridR = 14 14 14  # use a larger value than the original Wannier TB model
+    if args.command == 'wannier':
+        handle_wannier(args)
+    elif args.command == 'htb':
+        handle_htb(args)
+    elif args.comand == 'write_dat':
+        handle_write_dat(args)
+    elif args.comand == 'twist_amn':
+        handle_twist_amn(args)
+    else:
+        print("Unknown command")
+
+temp_input_file = """# Input file for building symmetric Wannier TB model
+ngridR = 12 12 1            # use a slightly larger value than the original TB model
+parse_symmetry = man        # man or auto
+
+# used if parse_symmetry = auto
+symprec = 1e-5
+&magmoms
+/
+
+# used if parse_symmetry = man
 &symmops
 # TR  det  alpha  nx  ny  nz  taux  tauy  tauz
   0   1    0      0   0   1   0     0     0   # e
@@ -303,23 +244,6 @@ ngridR = 14 14 14  # use a larger value than the original Wannier TB model
   1   1    180    0   0   1   0     0     0   # Tc2z
 /
 """
-        with open('symmetry.in', 'a+') as f:
-            f.write(temp_input)
-        f.close()
-
-    if job == 'htb':
-        h5htb(argv)
-    elif job == 'wannier':
-        wannier(argv)
-    elif job == 'set_w90eig_fermi_eq_zero':
-        set_w90eig_fermi_eq_zero(argv)
-    elif job == 'write_dat':
-        write_dat(argv)
-    elif job == 'twist_amn':
-        twist_amn(argv)
-
 
 if __name__ == '__main__':
-    work_dir = os.getcwd()
-    os.chdir(work_dir)
     main()

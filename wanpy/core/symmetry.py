@@ -11,17 +11,16 @@
 
 __date__ = "Mar. 30, 2023"
 
+from collections import namedtuple
 import numpy as np
 from numpy import linalg as LA
-from scipy.spatial.transform import Rotation as scipy_rot
 from scipy.spatial import distance_matrix
 from scipy.linalg import block_diag
 import sympy as sp
 from wanpy.core.errorhandler import WanpyError
 from wanpy.core.mesh import make_mesh, make_ws_gridR
-from wanpy.core.structure import Htb
+from wanpy.core.utils import get_op_cartesian, get_ntheta_from_rotmatrix
 from wanpy.core.units import *
-
 
 # class MPointGroup(object):
 #
@@ -373,7 +372,7 @@ class Symmetrize_Htb(object):
 def get_rep_spin(symmop):
     TR, det, theta, nx, ny, nz, taux, tauy, tauz = symmop
     axis = np.array([nx, ny, nz]) / LA.norm(np.array([nx, ny, nz]))
-    D = np.cos(theta/2) * sigma0 - 1j * np.sin(theta/2) * np.einsum('amn,a->mn', sigma[1:], axis)
+    D = np.cos(theta/2) * sigma0 - 1j * np.sin(theta/2) * np.einsum('amn,a->mn', sigma, axis)
     # if TR == 1: D = -1j * sigmay @ D # this line is incorrect, see operation rule for corepresentation.
     if TR == 1: D = D @ (-1j * sigmay)
     D[np.abs(D)<1e-10] = 0
@@ -447,17 +446,6 @@ def Ylm(l, m, r):
         if m == 5: return x*(x**2 - 3*y**2)/2/np.sqrt(6)                # fx(x2-3y2)
         if m == 6: return y*(3*x**2 - y**2)/2/np.sqrt(6)                # fy(3x2-y2)
 
-def get_op_cartesian(symmop):
-    """
-    Get O(3) rotation matrix from symmop
-    """
-    TR, det, theta, nx, ny, nz, taux, tauy, tauz = symmop
-    axis = np.array([nx, ny, nz]) / LA.norm(np.array([nx, ny, nz]))
-    rot = scipy_rot.from_rotvec(theta * axis)
-    op_cartesian = det * rot.as_matrix()
-    op_cartesian[np.abs(op_cartesian)<1e-10] = 0
-    return op_cartesian
-
 def get_proj_info(htb):
     """
       * Get atoms_pos, atoms_orbi from htb
@@ -503,17 +491,59 @@ def get_proj_info(htb):
 
     return atoms_pos, atoms_orbi
 
-def read_symmetry_inputfile(fname='symmetry.in'):
+# def read_symmetry_inputfile(fname='symmetry.in'):
+#     symmops = []
+#     with open(fname, 'r') as f:
+#         while True:
+#             inline = f.readline().split('#')[0]
+#
+#             if not inline:
+#                 break
+#
+#             if 'ngridR' in inline:
+#                 ngridR = [int(i) for i in inline.split()[-3:]]
+#
+#             if 'symmops' in inline:
+#                 while '/' not in inline:
+#                     inline = f.readline().split('#')[0]
+#                     symmops_i = inline.split()
+#                     if len(symmops_i) == 9:
+#                         symmops_i = [float(i) for i in symmops_i]
+#                         symmops_i[2] = symmops_i[2]/180 * np.pi
+#                         symmops.append(symmops_i)
+#                         assert int(symmops_i[0]) in [0, 1]
+#                         assert int(symmops_i[1]) in [-1, 1]
+#     symmops = np.array(symmops)
+#     f.close()
+#     return ngridR, symmops
+
+def parse_symmetry_inputfile(fname='symmetry.in'):
     symmops = []
+    magmoms = []
+    symprec = 1e-5
     with open(fname, 'r') as f:
         while True:
+            _pos = f.tell()
             inline = f.readline().split('#')[0]
 
-            if not inline:
-                break
+            if _pos == f.tell(): break
 
             if 'ngridR' in inline:
-                ngridR = [int(i) for i in inline.split()[-3:]]
+                ngridR = [int(i) for i in inline.split('=')[1].split()]
+
+            if 'parse_symmetry' in inline:
+                parse_symmetry = str(inline.split('=')[1].split()[0])
+
+            if 'symprec' in inline:
+                symprec = float(inline.split('=')[1].split()[0])
+
+            if 'magmoms' in inline:
+                while '/' not in inline:
+                    inline = f.readline().split('#')[0]
+                    magmoms_i = inline.split()
+                    if len(magmoms_i) == 3:
+                        magmoms_i = [float(i) for i in magmoms_i]
+                        magmoms.append(magmoms_i)
 
             if 'symmops' in inline:
                 while '/' not in inline:
@@ -526,14 +556,26 @@ def read_symmetry_inputfile(fname='symmetry.in'):
                         assert int(symmops_i[0]) in [0, 1]
                         assert int(symmops_i[1]) in [-1, 1]
     symmops = np.array(symmops)
+    magmoms = np.array(magmoms)
     f.close()
-    return ngridR, symmops
+
+    adict = {
+        'ngridR': ngridR,
+        'parse_symmetry': parse_symmetry,
+        'symprec': symprec,
+        'magmoms': magmoms,
+        'symmops': symmops,
+    }
+    wanpynamedtuple = namedtuple('WanpyNamedTuple', adict.keys())
+    win = wanpynamedtuple(**adict)
+    return win
 
 if __name__ == "__main__":
     import os
     # from wanpy.core.plot import *
     # import matplotlib.pyplot as plt
     from wanpy.env import ROOT_WDIR
+    from wanpy.core.structure import Htb
 
     wdir = os.path.join(ROOT_WDIR, r'symmtric_htb')
     input_dir = os.path.join(ROOT_WDIR, r'symmtric_htb/htblib')

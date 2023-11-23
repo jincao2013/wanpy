@@ -16,7 +16,7 @@ import errno
 import numpy as np
 from wanpy.env import ROOT_WDIR, PYGUI
 from wanpy.core.structure import Htb, Cell, Worbi
-from wanpy.core.symmetry import Symmetrize_Htb, get_proj_info, read_symmetry_inputfile
+from wanpy.core.symmetry import Symmetrize_Htb, get_proj_info
 from wanpy.core.units import *
 from wanpy.interface.wannier90 import *
 
@@ -55,7 +55,7 @@ class WannierInterpolation(object):
     """
 
     def __init__(self, fermi=0., poscar_fname='POSCAR', seedname='wannier90',
-                 symmetric_htb=False, symmetry_inputfile='symmetry.in',
+                 symmetric_htb=False, ngridR_symmhtb=None, symmops=None,
                  uudd_amn=True, verbose=False):
         self.poscar_fname = poscar_fname
         self.seedname = seedname
@@ -126,10 +126,8 @@ class WannierInterpolation(object):
             _index = np.where(w90_chk.lwindow[ik] == -1)[0]
             self.eig_win[ik, :w90_chk.ndimwin[ik]] = self.eig[ik, _index]
 
-        # symmetry.in
-        self.symmetric_htb = symmetric_htb
-        if symmetric_htb:
-            self.ngridR_symmhtb, self.symmops = read_symmetry_inputfile(symmetry_inputfile)
+        # symmetry
+        self.symmetric_htb, self.ngridR_symmhtb, self.symmops = symmetric_htb, ngridR_symmhtb, symmops
 
         print('calculating F.T. matrix')
         self.eikR = np.exp(-2j * np.pi * np.einsum('ka,Ra->kR', self.meshkf, self.gridR))
@@ -344,7 +342,6 @@ if __name__ == "__main__":
     #     np.diag(htb2.r_Ramn[htb2.nR//2, 2]),
     # ]).T.real
 
-    # import h5py
     # hr_Rmn = np.random.random([200, 100, 100]) + 1j * np.random.random([200, 100, 100])
     # # os.remove('test2.h5')
     # f = h5py.File('test2.h5', "w")
