@@ -6,15 +6,17 @@ WanPy requires the following packages to be installed:
 - scipy
 - pandas
 - sympy
-- matplotlib
 - h5py
 - mpi4py
 - fortio
+- spglib
+- matplotlib (optional)
+- phonopy (optional)
 
 ## Installation
 1. To install WanPy, create a Conda environment with the required packages:
 ```bash
-$ conda create -n wanpy python=3.7 numpy scipy pandas sympy matplotlib h5py mpi4py fortio spglib
+$ conda create -n wanpy python=3.7 numpy scipy pandas sympy h5py mpi4py fortio spglib matplotlib
 ````
 
 2. Uncompress wanpy package in personal computer or clusters: 
@@ -75,21 +77,7 @@ WanPy need to collect necessary Wannier TB data into a single `.h5` file as the 
 
 WanPy employs the uudd order of Wannier orbitals for its internal calculations, which is the default setting when using v1.2 of `wannier_setup`. If a higher version is used, one should utilize `wanpy twist_amn` to reorganize the .amn file into the uudd order and then proceed with the disentanglement process once more.
 
-
-**Method 1**: from `wanpy htb`, this will need at least `POSCAR, .wout, _hr.dat `. The files `.nnkp`,  `_r.dat`, `_wsvec.dat`, and `_spin.dat` are optional. 
-
-```bash
-# start to collect Wannier TB data 
-$ wanpy htb [options]
-
-# For detail of options, see
-$ wanpy htb -h
-
-```
-
-
-
-**Method 2**: from `wanpy wannier`, this will need `POSCAR .nnkp, .wout, .chk, .eig`, and `WAVECAR` if  `--spn`. The `nnkp` file can be obtained by: 
+**Method 1**: from `wanpy wannier`, this will need `POSCAR .nnkp, .wout, .chk, .eig`, and `WAVECAR` if  `--spn`. The `nnkp` file can be obtained by: 
 
 ```bash
 $ wannier90.x -pp wannier90.win 
@@ -108,23 +96,46 @@ $ wanpy wannier -h
 
 
 
-**Symmetric Wannier tight-binding models (SWTB)**
-
-Set symmetry operations that used to symmetrize the model in `symmetry.in`, 
+**Method 2**: from `wanpy htb`, this will need at least `POSCAR, .wout, _hr.dat `. The files `.nnkp`,  `_r.dat`, `_wsvec.dat`, and `_spin.dat` are optional. 
 
 ```bash
-ngridR = 14 14 14  # use a larger value than the original Wannier TB model
+# start to collect Wannier TB data 
+$ wanpy htb [options]
+
+# For detail of options, see
+$ wanpy htb -h
+
+```
+
+
+
+**Symmetric Wannier tight-binding models (SWTB)**
+
+Set symmetry operations that used to symmetrize the model in `symmetry.in`, a template file can also be produced by executing `wanpy wannier --temp`: 
+
+```bash
+ngridR = 12 12 1            # use a slightly larger value than the original TB model 
+
+# Choose between manually setting symmops or automatically detecting symmops from magmoms
+parse_symmetry = man        # Options: {man, auto}
+
+# Parameters used when parse_symmetry = auto
+symprec = 1e-5
+&magmoms
+/
+
+# Parameters used when parse_symmetry = man
 &symmops
 # TR  det  alpha  nx  ny  nz  taux  tauy  tauz
   0   1    0      0   0   1   0     0     0   # e
   0   1    180    0   0   1   0.5   0.5   0   # c2z
-# anti unitary
+# Anti-unitary symmetry operations
   1   1    0      0   0   1   0.5   0.5   0   # T
   1   1    180    0   0   1   0     0     0   # Tc2z
 /
 ```
 
-a template file can also be produced by executing `wanpy --temp`. Then start to get SWTB with an additional tag `--symmetry`
+Then start to get SWTB with an additional tag `--symmetry`
 
 ```bash
 $ wanpy wannier --symmetry [options]

@@ -226,20 +226,22 @@ def main():
         print("Unknown command")
 
 temp_input_file = """# Input file for building symmetric Wannier TB model
-ngridR = 12 12 1            # use a slightly larger value than the original TB model
-parse_symmetry = man        # man or auto
+ngridR = 12 12 1            # use a slightly larger value than the original TB model 
 
-# used if parse_symmetry = auto
+# Choose between manually setting symmops or automatically detecting symmops from magmoms
+parse_symmetry = man        # Options: {man, auto}
+
+# Parameters used when parse_symmetry = auto
 symprec = 1e-5
 &magmoms
 /
 
-# used if parse_symmetry = man
+# Parameters used when parse_symmetry = man
 &symmops
 # TR  det  alpha  nx  ny  nz  taux  tauy  tauz
   0   1    0      0   0   1   0     0     0   # e
   0   1    180    0   0   1   0.5   0.5   0   # c2z
-# anti unitary
+# Anti-unitary symmetry operations
   1   1    0      0   0   1   0.5   0.5   0   # T
   1   1    180    0   0   1   0     0     0   # Tc2z
 /
