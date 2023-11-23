@@ -14,7 +14,7 @@ WanPy requires the following packages to be installed:
 ## Installation
 1. To install WanPy, create a Conda environment with the required packages:
 ```bash
-$ conda create -n wanpy python=3.7 numpy scipy pandas sympy matplotlib h5py mpi4py fortio
+$ conda create -n wanpy python=3.7 numpy scipy pandas sympy matplotlib h5py mpi4py fortio spglib
 ````
 
 2. Uncompress wanpy package in personal computer or clusters: 
