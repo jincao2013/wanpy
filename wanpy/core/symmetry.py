@@ -19,7 +19,7 @@ from scipy.linalg import block_diag
 import sympy as sp
 from wanpy.core.errorhandler import WanpyError
 from wanpy.core.mesh import make_mesh, make_ws_gridR
-from wanpy.core.utils import get_op_cartesian, get_ntheta_from_rotmatrix
+from wanpy.core.utils import get_op_cartesian
 from wanpy.core.units import *
 
 # class MPointGroup(object):

@@ -41,8 +41,10 @@ def handle_wannier(args):
         print('WAVECAR will be used for interpolating spin operator.')
 
     T0 = time.time()
+    dat_fmt = '12.6'
     ngridR_symmhtb, symmops = None, None
     if args.symmetry:
+        dat_fmt = '16.10'
         win = parse_symmetry_inputfile('symmetry.in')
         ngridR_symmhtb, symmops = win.ngridR, win.symmops
         if win.parse_symmetry == 'auto':
@@ -57,7 +59,7 @@ def handle_wannier(args):
                                   )
     wanrun.run(cal_r=args.cal_r, cal_spin=args.cal_spin,
                write_h5=True, write_dat=args.write_dat, write_spn=args.write_spn,
-               decimals=args.decimals
+               h5decimals=args.h5decimals, fmt=dat_fmt
                )
     T1 = time.time()
 
@@ -130,7 +132,7 @@ def handle_htb(args):
 def handle_write_dat(args):
     from wanpy.core.structure import Htb
 
-    fmt = str(6+args.decimal) + '.' + str(args.decimal)
+    fmt = str(6+args.decimals) + '.' + str(args.decimals)
     htb = Htb()
     htb.load_h5(args.htb_fname)
     htb.save_wannier90_hr_dat(fmt=fmt)
@@ -182,8 +184,8 @@ def main():
     wannier_parser.add_argument('--spn', action='store_true', dest='write_spn',
                                 help='if write .spn file (formated), default is False')
     wannier_parser.add_argument('--dat', action='store_true', dest='write_dat',
-                                help='if write .dat file (formated), default is False')
-    wannier_parser.add_argument('--decimal', action='store', type=int, dest='decimals', default=16,
+                                help='if write .dat file, default is False. It will save with 6 decimals by default, and 10 decimals for symmetric case')
+    wannier_parser.add_argument('--h5decimals', action='store', type=int, dest='h5decimals', default=16,
                                 help='save .h5 with rounded double precision, default decimals is 16')
     wannier_parser.add_argument('--temp', action='store_true', dest='write_temp',
                                 help='write a templet symmetry.in file, default is False')
@@ -202,7 +204,7 @@ def main():
     write_dat_parser = subparsers.add_parser('write_dat', help='wanpy write_dat [options]')
     write_dat_parser.add_argument('-n', '--name', action='store', type=str, dest='htb_fname', default='htb.h5',
                                   help='fname of .h5, default is htb.h5')
-    write_dat_parser.add_argument('--decimal', action='store', type=int, dest='decimals', default=10,
+    write_dat_parser.add_argument('--decimals', action='store', type=int, dest='decimals', default=10,
                                   help='save .dat with rounded values, default decimals is 10')
     write_dat_parser.add_argument('-r', '--ramn', action='store_true', dest='save_r',
                                   help='if write _r.dat, default is False')

@@ -140,7 +140,7 @@ class WannierInterpolation(object):
 
     def run(self, cal_r=False, cal_spin=False, write_h5=True, write_dat=False,
             write_spn=False, hermite_r=True,
-            decimals=16, fmt='12.6'):
+            h5decimals=16, fmt='12.6'):
         # write_h5: if write htb.h5
         # write_dat: if write .dat files
         # write_spn: if write .spn file
@@ -193,14 +193,14 @@ class WannierInterpolation(object):
                 self.htb.save_wannier90_spin_dat(self.seedname, fmt=fmt)
 
         if write_h5:
-            if decimals is not None:
-                print('write htb.h5 with rounded double precision (decimals={})'.format(decimals))
+            if h5decimals is not None:
+                print('write htb.h5 with rounded double precision (decimals={})'.format(h5decimals))
             else:
                 print('write htb.h5 with fully double precision (larger size of .h5)')
             # to reduce the size of .h5
             # one can use htb.hr_Rmn = np.around(htb.hr_Rmn, 7) which is
             # in line with the numerical precision of wannier90_hr.dat.
-            self.htb.save_h5('htb.h5', decimals=decimals)
+            self.htb.save_h5('htb.h5', decimals=h5decimals)
 
     def get_hr_Rmn(self, hermite=True):
         hwk = np.einsum('kim,ki,kin->kmn', self.vmat.conj(), self.eig_win, self.vmat, optimize=True)
