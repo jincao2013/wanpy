@@ -13,15 +13,12 @@ __date__ = "Aug. 12, 2021"
 
 import os
 import errno
-import random
-
 import numpy as np
 from wanpy.env import ROOT_WDIR, PYGUI
 from wanpy.core.structure import Htb, Cell, Worbi
 from wanpy.core.symmetry import Symmetrize_Htb, get_proj_info, read_symmetry_inputfile
 from wanpy.core.units import *
 from wanpy.interface.wannier90 import *
-from wanpy.interface.vasp import VASP_wavecar
 
 # import matplotlib.pyplot as plt
 # from wanpy.core.plot import *
@@ -251,6 +248,7 @@ class WannierInterpolation(object):
 
     # @staticmethod
     def cal_vasp_spin_matrix(self):
+        from wanpy.interface.vasp import VASP_wavecar
         print('reading WAVECAR')
         wavecar = VASP_wavecar('WAVECAR', verbose=False, vasp_type='ncl')
 
@@ -323,7 +321,7 @@ if __name__ == "__main__":
     # # htb1.load_wannier90_dat()
     # htb3.load_h5('htb.soc.mx.U3.wanpy.h5')
 
-    wanrun = WannierInterpolation(symmtric_htb=True)
+    wanrun = WannierInterpolation(symmetric_htb=True)
     # wanrun.run(cal_r=False, cal_spin=False, write_h5=False, write_spn=False)
     wanrun.run(write_h5=False)
     htb = wanrun.htb

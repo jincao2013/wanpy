@@ -11,25 +11,24 @@
 #
 # https://github.com/jincao2013/wanpy
 
-
 import time
 import os
 import sys
-import re
 import numpy as np
 from optparse import OptionParser
 # sys.path.append(os.environ.get('PYTHONPATH'))
 from wanpy.env import __version__
-from wanpy.core.structure import Htb
-from wanpy.core.symmetry import Symmetrize_Htb, get_proj_info, read_symmetry_inputfile
 from wanpy.core.errorhandler import CommandNotFoundError
-from wanpy.interface.wannier90 import W90_eig
-from wanpy.interface.buildwannier import WannierInterpolation
 
 
 def h5htb(argv):
-    usage = 'wanpy htb [options] \n' + \
-    'gather wannier tight-binding informations into a single .h5 file \n'
+    usage = """wanpy htb [options]
+gather wannier tight-binding informations into a single .h5 file 
+"""
+
+    import re
+    from wanpy.core.structure import Htb
+    from wanpy.core.symmetry import Symmetrize_Htb, get_proj_info, read_symmetry_inputfile
 
     if os.path.exists('vasprun.xml'):
         fermi_vasprun = float(re.findall('.\d+.\d+', os.popen('grep efermi vasprun.xml').readline())[0])
@@ -98,7 +97,9 @@ def h5htb(argv):
     print('h5htb complete, time consuming {:.3f} s'.format(T2-T0))
 
 def wannier(argv):
-    pass
+    import re
+    from wanpy.interface.buildwannier import WannierInterpolation
+
     usage = 'wanpy wannier [options] \n\n' + \
             'wanpy.interface.buildwannier.WannierInterpolation:\n' + \
             WannierInterpolation.__doc__
@@ -107,6 +108,7 @@ def wannier(argv):
         print('fermi level is {} readed from vasprun.xml'.format(fermi_vasprun))
     else:
         fermi_vasprun = 0.0
+
 
     parser = OptionParser(usage)
     parser.add_option("-e", "--efermi", action="store", type="float", dest="fermi", default=fermi_vasprun,
@@ -167,6 +169,9 @@ The Fermi level is loaded from vasprun.xml if not specified,
 and the resulting .eig will restored with name `wannier90.eig.zero`.
     '''
 
+    import re
+    from wanpy.interface.wannier90 import W90_eig
+
     fermi_vasp = float(re.findall('.\d+.\d+', os.popen('grep efermi vasprun.xml').readline())[0])
 
     parser = OptionParser(usage)
@@ -191,6 +196,65 @@ and the resulting .eig will restored with name `wannier90.eig.zero`.
     print('Fermi level have been set at 0 eV by adjusting')
     print('E(wannier) = E(DFT) - ({}) eV'.format(fermi))
 
+def write_dat(argv):
+    usage = '''wanpy write_dat [-h] [-n fname_of_h5] [--decimal precision] [-r if save _r.dat]
+'''
+
+    from wanpy.core.structure import Htb
+
+    parser = OptionParser(usage)
+    parser.add_option("-n", "--name", action="store", type="str", dest="htb_fname", default='htb.h5',
+                      help="default is htb.h5")
+    parser.add_option('--decimal', action="store", type="int", dest="decimals", default=10,
+                      help="save .dat with rounded values, default decimals is 10")
+    parser.add_option("-r", '--ramn', action="store_true", dest="save_r",
+                      help="if write _r.dat, default is False")
+
+    options, args = parser.parse_args(argv)
+
+    htb_fname = options.htb_fname
+    decimal = options.decimal
+    save_r = options.save_r
+
+    fmt = str(6+decimal) + '.' + str(decimal)
+    htb = Htb()
+    htb.load_h5(htb_fname)
+    htb.save_wannier90_hr_dat(fmt=fmt)
+    if save_r:
+        htb.save_wannier90_r_dat(fmt=fmt)
+
+def twist_amn(argv):
+    usage = '''wanpy twist_amn [-h] [-t udud_to_uudd or uudd_to_udud]
+'''
+
+    from wanpy.interface.wannier90 import W90_amn
+
+    parser = OptionParser(usage)
+    parser.add_option("-t", "--type", action="store", type="str", dest="twist_type", default='udud_to_uudd',
+                      help="default is udud_to_uudd")
+    options, args = parser.parse_args(argv)
+
+    twist_type = options.twist_type
+
+    if twist_type == 'udud_to_uudd':
+        os.rename('wannier90.amn', 'wannier90_udud.amn')
+        print('found wannier90.amn')
+        print('this will twist .amn order from udud to uudd')
+        AMN = W90_amn()
+        AMN.load_from_w90('wannier90_udud.amn')
+        AMN.amn = np.einsum('knis->knsi', AMN.amn.reshape([AMN.nk, AMN.nb, AMN.nw // 2, 2])).reshape([AMN.nk, AMN.nb, -1])
+        AMN.save_w90('wannier90_uudd.amn')
+        os.system('ln -s wannier90_uudd.amn wannier90.amn')
+    elif twist_type == 'uudd_to_udud':
+        os.rename('wannier90.amn', 'wannier90_uudd.amn')
+        print('found wannier90.amn')
+        print('this will twist .amn order from uudd to udud')
+        AMN = W90_amn()
+        AMN.load_from_w90('wannier90_uudd.amn')
+        AMN.amn = np.einsum('knsi->knis', AMN.amn.reshape([AMN.nk, AMN.nb, 2, AMN.nw//2])).reshape([AMN.nk, AMN.nb, -1])
+        AMN.save_w90('wannier90_udud.amn')
+        os.system('ln -s wannier90_uudd.amn wannier90.amn')
+
 def main():
     usage = """
 Usage: wanpy [-h] [-V] [options] ...
@@ -203,11 +267,15 @@ Options:
                         into a single .h5 file,
                         [...] are optional.                             (use wanpy htb -h for details)
   wannier               get wannier tb model from .chk .eig .wout .nnkp (use wanpy wannier -h for details)
+  write_dat             write _ht.dat, _r.dat files from .h5            (use wanpy write_dat -h for details)
+  twist_amn             twist .amn in uudd or udud order                (use wanpy twist_amn -h for details)
     """
     job_list = ['-h', '--help', '-V', '--temp',
                 'htb',
                 'wannier',
                 'set_w90eig_fermi_eq_zero',
+                'write_dat',
+                'twist_amn',
                 ]
     # print(job_list)
 
@@ -251,6 +319,10 @@ ngridR = 14 14 14  # use a larger value than the original Wannier TB model
         wannier(argv)
     elif job == 'set_w90eig_fermi_eq_zero':
         set_w90eig_fermi_eq_zero(argv)
+    elif job == 'write_dat':
+        write_dat(argv)
+    elif job == 'twist_amn':
+        twist_amn(argv)
 
 
 if __name__ == '__main__':

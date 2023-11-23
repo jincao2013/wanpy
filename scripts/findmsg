@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 import sys
 import os
+import argparse
 import numpy as np
 import numpy.linalg as LA
-# from wanpy.core.structure import Cell
+import spglib
 from scipy.spatial.transform import Rotation as scipy_rot
 from phonopy.interface.calculator import read_crystal_structure
-import spglib
 
 __date__ = "Sep. 22, 2023"
 __version__ = "0.1.4"
@@ -146,27 +146,15 @@ def print_msg(cell_mag, latt, symprec=1e-5):
 
 
 if __name__ == "__main__":
-    usage = """
-    Usage: findmsg [-h] POSCAR [magmoms] [-t tolerance]
-"""
-    # print(sys.argv)
-    fname_poscar, fname_magmoms = None, None
-    if len(sys.argv) == 2:
-        fname_poscar = sys.argv[1]
-    elif len(sys.argv) == 3:
-        fname_poscar, fname_magmoms = sys.argv[1:]
-    else:
-        print(usage)
-        sys.exit()
-
-    try:
-        symprec = float(sys.argv[sys.argv.index('-t') + 1])
-    except ValueError:
-        symprec = 1e-5
+    description = 'Find magnetic point group from POSCAR and magmoms (optional) files with a given threshold.'
+    parser = argparse.ArgumentParser(description=description)
+    parser.add_argument('poscar', type=str, help='Input POSCAR file (e.g., POSCAR)')
+    parser.add_argument('-m', '--magmoms', type=str, help='Input magmoms file (e.g., magmoms)')
+    parser.add_argument('-t', '--threshold', type=float, default=1e-5, help='Threshold value (default: 1e-5)')
+    args = parser.parse_args()
+    fname_poscar, fname_magmoms = args.poscar, args.magmoms
+    symprec = args.threshold
     print('- Symmetry search tolerance in the unit of length is: {:10.7f} Angstrom. '.format(symprec))
-
-    # os.chdir('/Users/jincao/Downloads/temp')
-    # fname_poscar, fname_magmoms = r'POSCAR', r'magmoms'
 
     unitcell, optional_structure_info = read_crystal_structure(fname_poscar)
     num_atoms = unitcell.get_number_of_atoms()
@@ -191,10 +179,10 @@ if __name__ == "__main__":
             unitcell.get_magnetic_moments(),
         )
 
-    print('\n\nSpace group for non-magnetic structure:')
+    print('\n\nSpace group for non-magnetic structure (symprec:{:10.7f} Angstrom)'.format(symprec))
     print_spg(cell_nonmag, latt, symprec=symprec)
 
     if fname_magmoms is not None:
-        print('\n\nMagnetic space group for magnetic structure:')
+        print('\n\nMagnetic space group for magnetic structure (symprec:{:10.7f} Angstrom)'.format(symprec))
         print_msg(cell_mag, latt, symprec=symprec)
-        print('\n* TR = 1 is for operation with TR.')
+        print('\n* TR = 0 (without TR) or TR = 1 (with TR)')

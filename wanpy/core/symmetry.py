@@ -534,7 +534,7 @@ if __name__ == "__main__":
     import os
     # from wanpy.core.plot import *
     # import matplotlib.pyplot as plt
-    from wanpy.env import ROOT_WDIR, PYGUI
+    from wanpy.env import ROOT_WDIR
 
     wdir = os.path.join(ROOT_WDIR, r'symmtric_htb')
     input_dir = os.path.join(ROOT_WDIR, r'symmtric_htb/htblib')

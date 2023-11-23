@@ -43,7 +43,7 @@ test/
 # projects/
 wanpy/del
 wanpy/dev
-wanpy/dfttools
+scripts/dfttools
 _del/
 *__del.py
 *__dev.py

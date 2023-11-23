@@ -39,6 +39,6 @@ setup(
         "Operating System :: OS Independent",
     ],
     python_requires='>=3.6',
-    install_requires=['numpy', 'scipy', 'sympy', 'matplotlib', 'pandas', 'mpi4py', 'h5py', 'fortio'],
+    install_requires=['numpy', 'scipy', 'sympy', 'matplotlib', 'pandas', 'mpi4py', 'h5py', 'fortio', 'spglib'],
 )
 
