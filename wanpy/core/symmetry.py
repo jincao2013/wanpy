@@ -529,7 +529,6 @@ def read_symmetry_inputfile(fname='symmetry.in'):
     f.close()
     return ngridR, symmops
 
-
 if __name__ == "__main__":
     import os
     # from wanpy.core.plot import *

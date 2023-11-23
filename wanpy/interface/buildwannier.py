@@ -56,7 +56,7 @@ class WannierInterpolation(object):
 
     def __init__(self, fermi=0., poscar_fname='POSCAR', seedname='wannier90',
                  symmetric_htb=False, symmetry_inputfile='symmetry.in',
-                 v1_w90interface=True, verbose=False):
+                 uudd_amn=True, verbose=False):
         self.poscar_fname = poscar_fname
         self.seedname = seedname
         self.verbose = verbose
@@ -83,9 +83,9 @@ class WannierInterpolation(object):
         # self.wcc = w90_nnkp.wcc
         # self.wccf = w90_nnkp.wccf
 
-        print('please check it carefully: v1_w90interface={}'.format(v1_w90interface))
+        print('please check it carefully: uudd_amn={}'.format(uudd_amn))
         self.worbi = Worbi()
-        self.worbi.load_from_nnkp(seedname, v1_w90interface=v1_w90interface)
+        self.worbi.load_from_nnkp(seedname, uudd_amn=uudd_amn)
         self.wcc = self.worbi.proj_wcc
         self.wccf = self.worbi.proj_wccf
 

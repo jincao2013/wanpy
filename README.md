@@ -54,6 +54,12 @@ $ wanpy htb
 # Collect Wannier TB data to a single .h5 file
 $ wanpy wannier
 
+# Write _hr.dat and _r.dat (optional) from .h5 file
+$ wanpy write_dat
+
+# Twist the order of .amn (uudd or udud) 
+$ wanpy twist_amn
+
 # compare Wannier and VASP band structure. support HSE type calculation. 
 $ wpyplotband
 
@@ -63,8 +69,11 @@ $ statistic_cores ...
 
 ## Collect Wannier TB data
 
-WanPy can collect necessary Wannier TB data into a single `.h5` file as the input for further calculations. This can be done by: 
+WanPy need to collect necessary Wannier TB data into a single `.h5` file as the input for further calculations. This can be done by: 
 
+**Important notice:**
+
+WanPy employs the uudd order of Wannier orbitals for its internal calculations, which is the default setting when using v1.2 of `wannier_setup`. If a higher version is used, one should utilize `wanpy twist_amn` to reorganize the .amn file into the uudd order and then proceed with the disentanglement process once more.
 
 
 **Method 1**: from `wanpy htb`, this will need at least `POSCAR, .wout, _hr.dat `. The files `.nnkp`,  `_r.dat`, `_wsvec.dat`, and `_spin.dat` are optional. 
