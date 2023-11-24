@@ -14,9 +14,9 @@ __date__ = "Aug. 12, 2021"
 import os
 import errno
 import numpy as np
-from wanpy.env import ROOT_WDIR, PYGUI
 from wanpy.core.structure import Htb, Cell, Worbi
 from wanpy.core.symmetry import Symmetrize_Htb, get_proj_info
+from wanpy.core.utils import wannier90_load_wcc
 from wanpy.core.units import *
 from wanpy.interface.wannier90 import *
 
@@ -24,6 +24,9 @@ from wanpy.interface.wannier90 import *
 # from wanpy.core.plot import *
 # from wanpy.response.response_plot import *
 
+__all__ = [
+    'WannierInterpolation'
+]
 
 class WannierInterpolation(object):
     """
@@ -56,7 +59,7 @@ class WannierInterpolation(object):
 
     def __init__(self, fermi=0., poscar_fname='POSCAR', seedname='wannier90',
                  symmetric_htb=False, ngridR_symmhtb=None, symmops=None,
-                 uudd_amn=True, verbose=False):
+                 check_if_uudd_amn=True, verbose=False):
         self.poscar_fname = poscar_fname
         self.seedname = seedname
         self.verbose = verbose
@@ -74,6 +77,12 @@ class WannierInterpolation(object):
         else:
             raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), poscar_fname)
 
+        # check if uudd_amn in .wout
+        if check_if_uudd_amn:
+            _, _, _ = wannier90_load_wcc(seedname+'.wout', shiftincell=False, check_if_uudd_amn=check_if_uudd_amn)
+        else:
+            print('please check carefully whether the .amn is in uudd order.')
+
         # .nnkp .wout
         w90_nnkp = W90_nnkp()
         w90_nnkp.load_from_w90(seedname)
@@ -83,9 +92,8 @@ class WannierInterpolation(object):
         # self.wcc = w90_nnkp.wcc
         # self.wccf = w90_nnkp.wccf
 
-        print('please check it carefully: uudd_amn={}'.format(uudd_amn))
         self.worbi = Worbi()
-        self.worbi.load_from_nnkp(seedname, uudd_amn=uudd_amn)
+        self.worbi.load_from_nnkp(seedname, uudd_amn=True)
         self.wcc = self.worbi.proj_wcc
         self.wccf = self.worbi.proj_wccf
 
@@ -302,13 +310,10 @@ def check_htb_equ(htb1, htb2):
     assert (np.abs(htb1.spin_Ramn - htb2.spin_Ramn) < 1e-6).all()
 
 
-
-if PYGUI:
+if __name__ == "__main__":
+    from wanpy.env import ROOT_WDIR
     wdir = os.path.join(ROOT_WDIR, r'wanpy_debug/buildwannier/MnPd')
     input_dir = os.path.join(ROOT_WDIR, r'wanpy_debug/buildwannier/MnPd')
-
-
-if __name__ == "__main__":
     os.chdir(wdir)
 
     htb1 = Htb()

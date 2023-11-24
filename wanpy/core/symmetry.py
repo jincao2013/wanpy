@@ -184,8 +184,8 @@ class Symmetrize_Htb(object):
 
     def check_valid_symmops(self):
         symmops = self.symmops
-        assert set([int(i) for i in symmops.T[0]]) == {0, 1}
-        assert set([int(i) for i in symmops.T[1]]) == {-1, 1}
+        assert set([int(i) for i in symmops.T[0]]) <= {0, 1}
+        assert set([int(np.rint(i)) for i in symmops.T[1]]) <= {-1, 1}
 
     '''
       * F.T. between R-space and k-space

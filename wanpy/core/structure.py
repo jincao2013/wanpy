@@ -11,29 +11,42 @@
 
 __date__ = "May. 23, 2020"
 
-
 import os
 import errno
 import sys
-import math
-import re
 sys.path.append(os.environ.get('PYTHONPATH'))
-
-# from collections import defaultdict
 import spglib
 from enum import Enum, unique
 import numpy as np
 from numpy import linalg as LA
-# from scipy.spatial import distance_matrix
-from wanpy.core.units import *
-from wanpy.core.mesh import make_mesh
-from wanpy.core.utils import get_ntheta_from_rotmatrix, print_symmops
+from wanpy.core.utils import get_ntheta_from_rotmatrix, print_symmops, wanpy_check_if_uudd_amn
+from wanpy.core.utils import wannier90_read_hr, wannier90_read_rr, wannier90_load_wcc, \
+    wannier90_read_spin, wannier90_load_wsvec
 import h5py
 
+__all__ = [
+    'periodic_table',
+    'Cell', 'Worbi', 'Htb'
+]
 
 '''
   Basic object
 '''
+periodic_table = {
+    'H': 1, 'He': 2, 'Li': 3, 'Be': 4, 'B': 5, 'C': 6, 'N': 7, 'O': 8, 'F': 9, 'Ne': 10,
+    'Na': 11, 'Mg': 12, 'Al': 13, 'Si': 14, 'P': 15, 'S': 16, 'Cl': 17, 'Ar': 18,
+    'K': 19, 'Ca': 20, 'Sc': 21, 'Ti': 22, 'V': 23, 'Cr': 24, 'Mn': 25, 'Fe': 26, 'Co': 27, 'Ni': 28, 'Cu': 29, 'Zn': 30,
+    'Ga': 31, 'Ge': 32, 'As': 33, 'Se': 34, 'Br': 35, 'Kr': 36, 'Rb': 37, 'Sr': 38, 'Y': 39, 'Zr': 40,
+    'Nb': 41, 'Mo': 42, 'Tc': 43, 'Ru': 44, 'Rh': 45, 'Pd': 46, 'Ag': 47, 'Cd': 48, 'In': 49, 'Sn': 50,
+    'Sb': 51, 'Te': 52, 'I': 53, 'Xe': 54, 'Cs': 55, 'Ba': 56, 'La': 57, 'Ce': 58, 'Pr': 59, 'Nd': 60,
+    'Pm': 61, 'Sm': 62, 'Eu': 63, 'Gd': 64, 'Tb': 65, 'Dy': 66, 'Ho': 67, 'Er': 68, 'Tm': 69, 'Yb': 70,
+    'Lu': 71, 'Hf': 72, 'Ta': 73, 'W': 74, 'Re': 75, 'Os': 76, 'Ir': 77, 'Pt': 78, 'Au': 79, 'Hg': 80,
+    'Tl': 81, 'Pb': 82, 'Bi': 83, 'Po': 84, 'At': 85, 'Rn': 86, 'Fr': 87, 'Ra': 88, 'Ac': 89, 'Th': 90,
+    'Pa': 91, 'U': 92, 'Np': 93, 'Pu': 94, 'Am': 95, 'Cm': 96, 'Bk': 97, 'Cf': 98, 'Es': 99, 'Fm': 100,
+    'Md': 101, 'No': 102, 'Lr': 103, 'Rf': 104, 'Db': 105, 'Sg': 106, 'Bh': 107, 'Hs': 108, 'Mt': 109,
+    'Ds': 110, 'Rg': 111, 'Cn': 112, 'Nh': 113, 'Fl': 114, 'Mc': 115, 'Lv': 116, 'Ts': 117, 'Og': 118
+}
+
 @unique
 class OrbitalType(Enum):
     """
@@ -621,38 +634,6 @@ class Htb(object):
     def save_htb(self, fname='htb.h5', decimals=16):
         self.save_h5(fname=fname, decimals=decimals)
 
-    # commented on Feb.16 2020
-    # and to be removed later
-    #
-    # def load_npz(self, htb_fname=r'htb.npz'):
-    #     data = np.load(htb_fname, allow_pickle=True)
-    #     head = data['head'].item()
-    #     self.hr_Rmn = data.get('hr_Rmn')
-    #     self.r_Ramn = data.get('r_Ramn')
-    #     self.D_iRmn = data.get('D_iRmn')
-    #
-    #     for i in self._contents:
-    #         self.__dict__[i] = head[i]
-    #
-    #     self.cell = head['cell']
-    #     self.latt = self.cell.lattice
-    #     self.lattG = self.cell.latticeG
-    #     self.Rc = LA.multi_dot([self.latt, self.R.T]).T
-    #
-    # def save_npz(self, save_fname=r'htb.npz'):
-    #     head = defaultdict(f_none)
-    #
-    #     for i in self._contents:
-    #         head[i] = self.__dict__[i]
-    #
-    #     np.savez_compressed(save_fname,
-    #                         head=head,
-    #                         hr_Rmn=self.hr_Rmn,
-    #                         r_Ramn=self.r_Ramn,
-    #                         D_iRmn=self.D_iRmn,
-    #                         wsvecT=self.wsvecT,
-    #                         )
-
     def save_h5(self, fname='htb.h5', decimals=None):
         self.Rc = LA.multi_dot([self.latt, self.R.T]).T
 
@@ -716,32 +697,9 @@ class Htb(object):
         self.cell = kwargs.get('cell')
         self.worbi = kwargs.get('worbi')
 
-    # def load(self, name, cell, latt, lattG, wcc, fermi,
-    #          nw, nR, ndegen, R, hr_Rmn,
-    #          r_Ramn=None,
-    #          spin0_Rmn=None, spin_Ramn=None,
-    #          shiftincell=True
-    #          ):
-    #     self.cell = cell
-    #     self.name = name
-    #     self.latt = latt
-    #     self.lattG = lattG
-    #     self.wcc = wcc
-    #     self.fermi = fermi
-    #     self.nw, self.nR, self.ndegen, self.R, self.hr_Rmn = nw, nR, ndegen, R, hr_Rmn
-    #     self.Rc = LA.multi_dot([latt, self.R.T]).T
-    #     self.r_Ramn = r_Ramn
-    #     self.spin0_Rmn, self.spin_Ramn = spin0_Rmn, spin_Ramn
-    #
-    #     self.wccf = LA.multi_dot([LA.inv(latt), self.wcc.T]).T
-    #     if shiftincell:
-    #         self.wccf = np.remainder(self.wccf, np.array([1, 1, 1]))
-    #         self.wcc = LA.multi_dot([latt, self.wccf.T]).T
-
     def load_wannier90_dat(self,
                            poscar_fname=r'POSCAR',
                            seedname='wannier90',
-                           uudd_amn=True,
                            load_wsvec=False,
                            ):
         wout_fname = seedname + '.wout'
@@ -760,7 +718,7 @@ class Htb(object):
             raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), poscar_fname)
 
         if os.path.exists(wout_fname):
-            self.wcc, self.wccf = self._w90_load_wcc(fname=wout_fname, check_if_uudd_amn=True)
+            self.wcc, self.wccf, wborden = wannier90_load_wcc(fname=wout_fname, shiftincell=False, check_if_uudd_amn=True)
             print('loaded from {}'.format(wout_fname))
         else:
             print('\033[0;31mfile not found: {} \033[0m'.format(wout_fname))
@@ -768,13 +726,13 @@ class Htb(object):
         nnkp_wanning = False
         if os.path.exists(nnkp_fname):
             nnkp_wanning = True
-            self.worbi.load_from_nnkp(seedname, uudd_amn=uudd_amn)
+            self.worbi.load_from_nnkp(seedname, uudd_amn=True)
             print('loaded from {}'.format(nnkp_fname))
         else:
             print('\033[0;31mfile not found: {} \033[0m'.format(nnkp_fname))
 
         if os.path.exists(hr_fname):
-            self.nw, self.nR, self.ndegen, self.R, self.hr_Rmn = self._read_hr(fname=hr_fname)
+            self.nw, self.nR, self.ndegen, self.R, self.hr_Rmn = wannier90_read_hr(fname=hr_fname)
             self.Rc = (self.latt @ self.R.T).T
             # self.r_Ramn = self._read_rr_v2x(fname=r_fname, nR=self.nR)
             print('loaded from {}'.format(hr_fname))
@@ -783,19 +741,19 @@ class Htb(object):
             # print('\033[1;31m[WANNING] \033[0m' + '{} file not found'.format(hr_fname))
 
         if os.path.exists(r_fname):
-            self.r_Ramn = self._read_rr(fname=r_fname)
+            self.r_Ramn = wannier90_read_rr(fname=r_fname)
             print('loaded from {}'.format(r_fname))
         else:
             print('\033[0;31mfile not found: {} \033[0m'.format(r_fname))
 
         if os.path.exists(spin_fname):
-            self.spin0_Rmn, self.spin_Ramn = self._read_spin(fname=spin_fname)
+            self.spin0_Rmn, self.spin_Ramn = wannier90_read_spin(fname=spin_fname)
             print('loaded from {}'.format(spin_fname))
         else:
             print('\033[0;31mfile not found: {} \033[0m'.format(spin_fname))
 
         if os.path.exists(wsvec_fname) and load_wsvec:
-            self.invndegenT, self.wsvecT = self._w90_load_wsvec(fname=wsvec_fname, nw=self.nw, nR=self.nR)
+            self.invndegenT, self.wsvecT = wannier90_load_wsvec(fname=wsvec_fname, nw=self.nw, nR=self.nR)
             print('loaded from {}'.format(wsvec_fname))
         else:
             print('{} not loaded'.format(wsvec_fname))
@@ -812,8 +770,6 @@ class Htb(object):
         self.save_wannier90_hr_dat(seedname)
         self.save_wannier90_r_dat(seedname)
         self.save_wannier90_spin_dat(seedname)
-        # if self.D_iRmn is not None:
-        #     self.save_D_dat()
 
     def save_wannier90_hr_dat(self, seedname='wannier90', fmt='12.6'):
         hr_fname = seedname + '_hr.dat'
@@ -847,13 +803,6 @@ class Htb(object):
                         formatted_values.insert(0, '{: >5d}{: >5d}'.format(wj + 1, wi + 1, ))
                         formatted_values.insert(0, '{: >5d}{: >5d}{: >5d}'.format(_R[0], _R[1], _R[2]))
                         f.write(''.join(formatted_values) + '\n')
-                        # f.write(
-                        #     '{: >5d}{: >5d}{: >5d}{: >5d}{: >5d}{: >12.6f}{: >12.6f}\n'.format(_R[0], _R[1], _R[2],
-                        #                                                                        wj + 1, wi + 1,
-                        #                                                                        hr_Rmn[i, wj, wi].real,
-                        #                                                                        hr_Rmn[i, wj, wi].imag,
-                        #                                                                        )
-                        # )
         f.close()
 
     def save_wannier90_r_dat(self, seedname='wannier90', fmt=12.6):
@@ -880,15 +829,6 @@ class Htb(object):
                         formatted_values.insert(0, '{: >5d}{: >5d}'.format(wj + 1, wi + 1, ))
                         formatted_values.insert(0, '{: >5d}{: >5d}{: >5d}'.format(_R[0], _R[1], _R[2]))
                         f.write(''.join(formatted_values) + '\n')
-                        # f.write(
-                        #     '{: >5d}{: >5d}{: >5d}{: >5d}{: >5d}{: >12.6f}{: >12.6f}{: >12.6f}{: >12.6f}{: >12.6f}{: >12.6f}\n'.format(
-                        #         _R[0], _R[1], _R[2],
-                        #         wj + 1, wi + 1,
-                        #         r_Ramn[i, 0, wj, wi].real, r_Ramn[i, 0, wj, wi].imag,
-                        #         r_Ramn[i, 1, wj, wi].real, r_Ramn[i, 1, wj, wi].imag,
-                        #         r_Ramn[i, 2, wj, wi].real, r_Ramn[i, 2, wj, wi].imag,
-                        #         )
-                        # )
         f.close()
 
     def save_wannier90_spin_dat(self, seedname='wannier90', fmt='12.6'):
@@ -917,59 +857,7 @@ class Htb(object):
                         formatted_values.insert(0, '{: >5d}{: >5d}'.format(wj + 1, wi + 1, ))
                         formatted_values.insert(0, '{: >5d}{: >5d}{: >5d}'.format(_R[0], _R[1], _R[2]))
                         f.write(''.join(formatted_values) + '\n')
-                        # f.write(
-                        #     '{: >5d}{: >5d}{: >5d}{: >5d}{: >5d}{: >12.6f}{: >12.6f}{: >12.6f}{: >12.6f}{: >12.6f}{: >12.6f}{: >12.6f}{: >12.6f}\n'.format(
-                        #         _R[0], _R[1], _R[2],
-                        #         wj + 1, wi + 1,
-                        #         spin0_Rmn[i, wj, wi].real, spin0_Rmn[i, wj, wi].imag,
-                        #         spin_Ramn[i, 0, wj, wi].real, spin_Ramn[i, 0, wj, wi].imag,
-                        #         spin_Ramn[i, 1, wj, wi].real, spin_Ramn[i, 1, wj, wi].imag,
-                        #         spin_Ramn[i, 2, wj, wi].real, spin_Ramn[i, 2, wj, wi].imag,
-                        #         )
-                        # )
         f.close()
-
-    # def save_D_dat(self, seedname=r'wanpy_symmOP', fmt='12.6'):
-    #     for _isymmOP in range(self.nD):
-    #         fname = seedname + '_' + str(_isymmOP+1) + '.dat'
-    #         symm_name = self.D_namelist[_isymmOP]
-    #         D_Rmn = self.D_iRmn[_isymmOP]
-    #
-    #         if os.path.exists(fname):
-    #             os.remove(fname)
-    #
-    #         with open(fname, 'a') as f:
-    #             f.write('{} \n'.format(symm_name))
-    #             f.write('          {}\n'.format(self.nw))
-    #             f.write('          {}\n'.format(self.nR))
-    #
-    #             countor = 0
-    #             for i in range(self.nR):
-    #                 if countor == 15:
-    #                     countor = 0
-    #                     f.write(' \n')
-    #                 f.write('    ')
-    #                 f.write(str(self.ndegen[i]))
-    #                 countor += 1
-    #             f.write(' \n')
-    #
-    #             for i, _R in zip(range(self.nR), self.R):
-    #                 for wi in range(self.nw):
-    #                     for wj in range(self.nw):
-    #                         # values = [D_Rmn[i, wj, wi].real, D_Rmn[i, wj, wi].imag]
-    #                         # fmt_str = '{: >' + fmt + 'f}'
-    #                         # formatted_values = [fmt_str.format(value) for value in values]
-    #                         # formatted_values.insert(0, '{: >5d}{: >5d}'.format(wj + 1, wi + 1, ))
-    #                         # formatted_values.insert(0, '{: >5d}{: >5d}{: >5d}'.format(_R[0], _R[1], _R[2]))
-    #                         # f.write(''.join(formatted_values) + '\n')
-    #                         f.write(
-    #                             '{: >5d}{: >5d}{: >5d}{: >5d}{: >5d}{: >12.6f}{: >12.6f}\n'.format(_R[0], _R[1], _R[2],
-    #                                                                                                wj + 1, wi + 1,
-    #                                                                                                D_Rmn[i, wj, wi].real,
-    #                                                                                                D_Rmn[i, wj, wi].imag,
-    #                                                                                                )
-    #                         )
-    #         f.close()
 
     def save_wcc(self, fname=r'wcc.vasp', cartesian=False):
         if os.path.exists(fname):
@@ -997,180 +885,6 @@ class Htb(object):
                 poscar.write('  {: 2.16f}  {: 2.16f}  {: 2.16f}\n'.format(i[0], i[1], i[2]))
             poscar.write('\n')
         poscar.close()
-
-    '''
-      * I/O level 2
-    '''
-    def _read_hr(self, fname):
-        with open(fname, 'r') as hr_file:
-            hr_file.readline()
-
-            nw = int(hr_file.readline().strip())
-            nR = int(hr_file.readline().strip())
-
-            ndegen = np.zeros((nR), dtype='int64')
-            index = 0
-            for i in range(math.ceil(nR / 15)):
-                for j in hr_file.readline().split():
-                    ndegen[index] = int(j)
-                    index += 1
-
-            R = np.zeros((nR, 3), dtype='int64')
-            hr_Rmn = np.zeros((nR, nw, nw), dtype='complex128')
-            for nrpts_i in range(nR):
-
-                for m in range(nw):
-                    for n in range(nw):
-                        inline = hr_file.readline().split()
-                        inline_m = int(inline[3]) - 1
-                        inline_n = int(inline[4]) - 1
-                        hr_Rmn[nrpts_i, inline_m, inline_n] = complex(float(inline[5]), float(inline[6]))
-                R[nrpts_i] = np.array(inline[:3], dtype='int64')
-
-        return nw, nR, ndegen, R, hr_Rmn
-
-    def _read_rr(self, fname):
-        with open(fname, 'r') as r_file:
-            r_file.readline()
-            nw = int(r_file.readline().strip())
-            nR = int(r_file.readline().strip())
-
-            R = np.zeros((nR, 3), dtype='int64')
-            r_Ramn = np.zeros((nR, 3, nw, nw), dtype='complex128')
-            for nrpts_i in range(nR):
-
-                for m in range(nw):
-                    for n in range(nw):
-                        inline = r_file.readline().split()
-                        inline_m = int(inline[3]) - 1
-                        inline_n = int(inline[4]) - 1
-                        r_Ramn[nrpts_i, 0, inline_m, inline_n] = np.complex(float(inline[5]), float(inline[6]))
-                        r_Ramn[nrpts_i, 1, inline_m, inline_n] = np.complex(float(inline[7]), float(inline[8]))
-                        r_Ramn[nrpts_i, 2, inline_m, inline_n] = np.complex(float(inline[9]), float(inline[10]))
-
-                R[nrpts_i] = np.array(inline[:3], dtype='int64')
-
-        return r_Ramn
-
-    def _read_spin(self, fname):
-        with open(fname, 'r') as f:
-            f.readline()
-            nw = int(f.readline().strip())
-            nR = int(f.readline().strip())
-
-            R = np.zeros([nR, 3], dtype='int64')
-            spin0_Rmn = np.zeros([nR, nw, nw], dtype='complex128')
-            spin_Ramn = np.zeros([nR, 3, nw, nw], dtype='complex128')
-            for nrpts_i in range(nR):
-                for m in range(nw):
-                    for n in range(nw):
-                        inline = f.readline().split()
-                        inline_m = int(inline[3]) - 1
-                        inline_n = int(inline[4]) - 1
-                        spin0_Rmn[nrpts_i, inline_m, inline_n] = np.complex(float(inline[5]), float(inline[6]))
-                        spin_Ramn[nrpts_i, 0, inline_m, inline_n] = np.complex(float(inline[7]), float(inline[8]))
-                        spin_Ramn[nrpts_i, 1, inline_m, inline_n] = np.complex(float(inline[9]), float(inline[10]))
-                        spin_Ramn[nrpts_i, 2, inline_m, inline_n] = np.complex(float(inline[11]), float(inline[12]))
-
-                R[nrpts_i] = np.array(inline[:3], dtype='int64')
-
-        return spin0_Rmn, spin_Ramn
-
-    def _read_rr_v2x(self, fname, nR):
-        """
-         interface with wannier90 v2.x
-        """
-        with open(fname, 'r') as r_file:
-            r_file.readline()
-            nw = int(r_file.readline().strip())
-
-            R = np.zeros((nR, 3), dtype='int64')
-            r_Ramn = np.zeros((nR, 3, nw, nw), dtype='complex128')
-            for nrpts_i in range(nR):
-
-                for m in range(nw):
-                    for n in range(nw):
-                        inline = r_file.readline().split()
-                        inline_m = int(inline[3]) - 1
-                        inline_n = int(inline[4]) - 1
-                        r_Ramn[nrpts_i, 0, inline_m, inline_n] = np.complex(float(inline[5]), float(inline[6]))
-                        r_Ramn[nrpts_i, 1, inline_m, inline_n] = np.complex(float(inline[7]), float(inline[8]))
-                        r_Ramn[nrpts_i, 2, inline_m, inline_n] = np.complex(float(inline[9]), float(inline[10]))
-
-                R[nrpts_i] = np.array(inline[:3], dtype='int64')
-
-        return r_Ramn
-
-    def _w90_load_wcc(self, fname, shiftincell=False, check_if_uudd_amn=True):
-        lattice = np.zeros((3, 3), dtype='float64')
-        with open(fname, 'r') as f:
-            inline = f.readline()
-            while 'Lattice Vectors' not in inline:
-                inline = f.readline()
-            lattice[:, 0] = np.array(re.findall(r'.\d+\.\d+', f.readline()), dtype='float64')
-            lattice[:, 1] = np.array(re.findall(r'.\d+\.\d+', f.readline()), dtype='float64')
-            lattice[:, 2] = np.array(re.findall(r'.\d+\.\d+', f.readline()), dtype='float64')
-            while 'Number of Wannier Functions' not in inline:
-                inline = f.readline()
-            nw = int(re.findall(r'\d+', inline)[0])
-            wcc = np.zeros((nw, 3), dtype='float64')
-            wborden = np.zeros(nw, dtype='float64')
-            while inline != ' Final State\n':
-                inline = f.readline()
-            for i in range(nw):
-                inline = np.array(re.findall(r'.\d+\.\d+', f.readline()), dtype='float64')
-                wcc[i] = inline[:3]
-                # wborden[i] = inline[-1]
-        f.close()
-
-        wccf = LA.multi_dot([LA.inv(lattice), wcc.T]).T
-        if shiftincell:
-            wccf = np.remainder(wccf, np.array([1, 1, 1]))
-            wcc = LA.multi_dot([lattice, wccf.T]).T
-
-        if check_if_uudd_amn:
-            # test uudd
-            _wcc = wcc.reshape([2, nw // 2, 3])
-            distance_uudd = np.sum((_wcc[1] - _wcc[0]) ** 2) / nw
-
-            # test udud
-            _wcc = wcc.reshape([nw // 2, 2, 3])
-            distance_udud = np.sum((_wcc[1] - _wcc[0]) ** 2) / nw
-
-            if_uudd_amn = distance_udud > 0.1 > distance_uudd
-            if if_uudd_amn:
-                print('\033[0;31m.amn is not in order of uudd \033[0m')
-                print('\033[0;31mone may use twist_amn` to twist the .amn file into the uudd order, and then perform the disentanglement process again.  \033[0m')
-
-        return wcc, wccf
-
-    def _w90_load_wsvec(self, fname, nw, nR):
-        max_ndegenT = 8  # max number of unit cells that can touch
-
-        R = np.zeros([nR, 3], dtype='int64')
-        ndegenT = np.zeros([nR, nw, nw], dtype='int64')
-        invndegenT = np.zeros([max_ndegenT, nR, nw, nw], dtype='float64')
-        wsvecT = np.zeros([max_ndegenT, nR, nw, nw, 3], dtype='int64')
-
-        with open(fname, 'r') as f:
-            f.readline()
-            for iR in range(nR):
-                for wm in range(nw):
-                    for wn in range(nw):
-                        inline = np.array(f.readline().split(), dtype='int64')
-                        m, n = inline[3:] - 1
-                        R[iR] = inline[:3]
-                        _ndegenT = int(f.readline())
-                        ndegenT[iR, m, n] = _ndegenT
-                        invndegenT[:_ndegenT, iR, m, n] = 1/_ndegenT
-                        for j in range(_ndegenT):
-                            wsvecT[j, iR, m, n] = np.array(f.readline().split(), dtype='int64')
-
-        max_ndegenT = np.max(ndegenT)
-        wsvecT = wsvecT[:max_ndegenT]
-        invndegenT = invndegenT[:max_ndegenT]
-
-        return invndegenT, wsvecT
 
     '''
       * operation
@@ -1344,386 +1058,7 @@ class Htb(object):
 
 
 '''
-  calculated
-'''
-class Bandstructure(object):
-
-    def __init__(self, nb=None, nk=None, latt=None, nmesh=None):
-        self.nb = nb
-        self.nk = nk
-
-        self.latt = latt
-        self.lattG = 2 * np.pi * LA.inv(latt.T)
-
-        self.nmesh = nmesh
-        self.meshk = make_mesh(nmesh, mesh_type='continuous')
-        self.meshkc = LA.multi_dot([self.lattG, self.meshk.T]).T
-
-        self.eig = None # (nk, nb)
-        self.BC = 3 # (3, nk, nb)
-
-
-    '''
-      * Plot
-    '''
-    def plot_distribution(self, dist, vmax=None):
-        import matplotlib.pyplot as plt
-
-        # dist = np.sum(meshkc, axis=1)
-
-        meshkc = self.meshkc
-        nk1, nk2, nk3 = self.nmesh
-        cmap = 'seismic'
-
-        # nk, nw = bandE.shape
-        # dos = np.log(dos)
-
-        fig = plt.figure('dist', figsize=(8, 4))
-        fig.clf()
-        ax = fig.add_subplot(111)
-
-        XX_MIN = meshkc.T[0].min()
-        XX_MAX = meshkc.T[0].max()
-        YY_MIN = meshkc.T[1].min()
-        YY_MAX = meshkc.T[1].max()
-
-        ax.axis([XX_MIN, XX_MAX, YY_MIN, YY_MAX])
-        ax.axhline(0, color='k', linewidth=0.5, zorder=101)
-
-        ax.set_xlim(XX_MIN, XX_MAX)
-        ax.set_ylim(YY_MIN, YY_MAX)
-
-        meshkc_2D = meshkc.reshape(nk1, nk2, 3)  # XY or ac face
-        dist_2D = dist.reshape(nk1, nk2)
-        # meshkc_2D = np.einsum('YXa->XYa', meshkc_2D)
-        # dist_2D = np.einsum('YX->XY', dist_2D)
-
-        if vmax == None:
-            vmax = np.max(np.abs(dist))
-        levels = np.linspace(-vmax, vmax, 500)
-
-        cs = ax.contourf(meshkc_2D[:, :, 0], meshkc_2D[:, :, 1], dist_2D, levels, vmax=vmax, vmin=-vmax, cmap=cmap)
-        # plt.xlabel('$k_x$')
-        # plt.ylabel('$k_y$')
-        # plt.title('Fermi={:.4f} eV')
-
-        cbar = plt.colorbar(cs)
-        # cbar.set_label('Density of States')
-        cbar.set_ticks(np.linspace(-vmax, vmax, 5))
-
-        ax.set_aspect('equal', adjustable='box')
-        fig.tight_layout()
-
-        fig.show()
-
-
-class BandstructureHSP(object):
-
-    def __init__(self):
-        self.nb = None
-        self.nk = None
-
-        self.eig = None # (nk, nb)
-        self.eig_ref = None # (nk, nb)
-        self.U = None
-        self.HSP_list = None
-        self.HSP_name = None
-        self.HSP_path_frac = None
-        self.HSP_path_car = None
-
-        self.BC = 0 #  (3, nk, nb)
-        self.bandprojection = None # (nw, nk, nb)
-        self.surfDOS = None
-
-    '''
-      * Plot
-    '''
-    def plot_band(self, eemin=-3.0, eemax=3.0, unit='C', savefname='band.pdf'):
-        import matplotlib.pyplot as plt
-        from wanpy.core.toolkits import kmold
-
-        nline = self.HSP_list.shape[0] - 1
-        xlabel = self.HSP_name
-        if unit.upper() == 'C':
-            kpath = kmold(self.HSP_path_car)
-        elif unit.upper() == 'D':
-            kpath = kmold(self.HSP_path_frac)
-        else:
-            kpath = None
-
-        '''
-          * plot band
-        '''
-        fig = plt.figure('band', figsize=[4, 3], dpi=150)
-        # fig = plt.figure('band')
-        fig.clf()
-        ax = fig.add_subplot(111)
-        ax.axis([kpath.min(), kpath.max(), eemin, eemax])
-        ax.axhline(0, color='k', linestyle="--", linewidth=1, zorder=101)
-
-        ax.plot(kpath, self.eig, linewidth=1, linestyle="-", color='k', alpha=1, zorder=12)
-
-        for i in range(1, nline):
-            ax.axvline(x=kpath[i * self.nk // nline], linestyle='-', color='k', linewidth=1, alpha=1, zorder=101)
-
-        if xlabel is not None:
-            # xlabel = ['K', 'G', '-K', '-M', 'G', 'M', 'K']
-            num_xlabel = len(xlabel)
-            plt.xticks(kpath[np.arange(num_xlabel) * (self.nk // nline)], xlabel)
-
-        ax.set_ylabel('Energy (eV)')
-
-        fig.tight_layout()
-        fig.show()
-        # fig.savefig(savefname)
-
-        # with open('band.dat', 'a') as f:
-        #     for i in range(self.nk):
-        #         f.write('{: <15.6f}'.format(kpath[i]))
-        #         for j in range(self.nb):
-        #             f.write('{: <15.6f}'.format(self.eig[i, j]))
-        #         f.write('\n')
-        # f.close()
-
-    def plot_2band_compare(self, eemin=-3.0, eemax=3.0, unit='C', save=False, savefname='compareband.png'):
-        # import matplotlib
-        import matplotlib.pyplot as plt
-        from wanpy.core.toolkits import kmold
-        # import matplotlib.pylab as pylab
-
-        # matplotlib.rcdefaults()
-        # params = {
-        #     'axes.labelsize': '12',
-        #     'xtick.labelsize': '12',
-        #     'ytick.labelsize': '12',
-        #     'legend.fontsize': '12',
-        #     'xtick.direction': 'in',
-        #     'ytick.direction': 'in',
-        #     'ytick.minor.visible': True,
-        #     'xtick.minor.visible': True,
-        #     'xtick.top': True,
-        #     'ytick.right': True,
-        #     # 'figure.figsize': '5, 4',  # set figure size
-        #     # 'figure.dpi': '100',  # set figure size
-        #     'pdf.fonttype': '42',  # set figure size
-        #     'font.family': 'sans-serif',  # set figure size
-        #     # 'font.serif': 'Times',  # set figure size
-        #     'font.sans-serif': 'Arial',  # set figure size
-        # }
-        # pylab.rcParams.update(params)
-
-        nline = self.HSP_list.shape[0] - 1
-        xlabel = self.HSP_name
-        if unit.upper() == 'C':
-            kpath = kmold(self.HSP_path_car)
-        elif unit.upper() == 'D':
-            kpath = kmold(self.HSP_path_frac)
-        else:
-            kpath = None
-
-        '''
-          * plot band
-        '''
-        # fig = plt.figure('compare', figsize=[4, 3], dpi=150)
-        fig = plt.figure('compare')
-        fig.clf()
-        ax = fig.add_subplot(111)
-
-        ax.axis([kpath.min(), kpath.max(), eemin, eemax])
-        ax.axhline(0, color='k', linewidth=0.5, zorder=101)
-
-        ax.plot(kpath, self.eig, linewidth=6, linestyle="-", color='#ff1744', alpha=0.3, zorder=12)
-        ax.plot(kpath, self.eig_ref, linewidth=2, linestyle="-", color='k', alpha=1, zorder=11)
-
-        for i in range(1, nline):
-            ax.axvline(x=kpath[i * self.nk // nline], linestyle='-', color='k', linewidth=0.5, alpha=1, zorder=101)
-
-        if xlabel is not None:
-            # xlabel = ['K', 'G', '-K', '-M', 'G', 'M', 'K']
-            num_xlabel = len(xlabel)
-            plt.xticks(kpath[np.arange(num_xlabel) * (self.nk // nline)], xlabel)
-        ax.set_ylabel('$Energy / (meV)$')
-
-        fig.tight_layout()
-        fig.show()
-        fig.savefig(savefname)
-
-    def plot_distribution_in_band(self, distri, eemin=-3.0, eemax=3.0, unit='C', S=30, vmax=None):
-        import matplotlib.pyplot as plt
-        from wanpy.core.toolkits import kmold
-
-        # distri (nk, nb)
-
-        if vmax == None:
-            vmax = np.abs(distri).max()
-        vmin = -vmax
-
-        cmap = 'seismic'
-        nline = self.HSP_list.shape[0] - 1
-        xlabel = self.HSP_name
-        if unit.upper() == 'C':
-            kpath = kmold(self.HSP_path_car)
-        elif unit.upper() == 'D':
-            kpath = kmold(self.HSP_path_frac)
-        else:
-            kpath = None
-
-        '''
-          * plot band
-        '''
-        fig = plt.figure('BC dist')
-        fig.clf()
-        ax = fig.add_subplot(111)
-
-        ax.axis([kpath.min(), kpath.max(), eemin, eemax])
-        ax.axhline(0, color='k', linewidth=0.5, zorder=101)
-
-        for i in range(1, nline):
-            ax.axvline(x=kpath[i * self.nk // nline], linestyle='-', color='k', linewidth=0.5, alpha=1, zorder=101)
-
-        if xlabel is not None:
-            # xlabel = ['K', 'G', '-K', '-M', 'G', 'M', 'K']
-            num_xlabel = len(xlabel)
-            plt.xticks(kpath[np.arange(num_xlabel) * (self.nk // nline)], xlabel)
-        # ax.set_ylabel('$Energy / (eV)$')
-
-        ax.plot(kpath, self.eig, linewidth=0.5, linestyle="-", color='k', alpha=1, zorder=21)
-        im = ax.scatter(np.kron(kpath, np.ones([self.nb])).T, self.eig, cmap=cmap, c=distri, s=S, alpha=1, vmin=vmin, vmax=vmax, zorder=11)
-        plt.colorbar(im)
-
-        fig.tight_layout()
-        fig.show()
-        # fig.savefig(savefname)
-
-    def plot_bandprojection(self, S, eemin=-3.0, eemax=3.0, unit='D', savefname=None):
-        import matplotlib.pyplot as plt
-        from wanpy.core.toolkits import kmold
-
-        # matplotlib.rcdefaults()
-        # params = {
-        #     'axes.labelsize': '12',
-        #     'xtick.labelsize': '12',
-        #     'ytick.labelsize': '12',
-        #     'legend.fontsize': '12',
-        #     'xtick.direction': 'in',
-        #     'ytick.direction': 'in',
-        #     'ytick.minor.visible': True,
-        #     'xtick.minor.visible': True,
-        #     'xtick.top': True,
-        #     'ytick.right': True,
-        #     # 'figure.figsize': '5, 4',  # set figure size
-        #     # 'figure.dpi': '100',  # set figure size
-        #     'pdf.fonttype': '42',  # set figure size
-        #     'font.family': 'sans-serif',  # set figure size
-        #     # 'font.serif': 'Times',  # set figure size
-        #     'font.sans-serif': 'Arial',  # set figure size
-        # }
-        # pylab.rcParams.update(params)
-
-        proj = np.abs(S) # (nw, nk, nb)
-
-        vmax = np.max(proj)
-        vmin = np.min(proj)
-
-        cmap = 'Reds'
-        cmap = 'seismic'
-        nline = self.HSP_list.shape[0] - 1
-        xlabel = self.HSP_name
-        if unit.upper() == 'C':
-            kpath = kmold(self.HSP_path_car)
-        elif unit.upper() == 'D':
-            kpath = kmold(self.HSP_path_frac)
-        else:
-            kpath = None
-
-        '''
-          * plot band
-        '''
-        # fig = plt.figure('proj band', figsize=[3, 3], dpi=150) # for FIG.S1&2
-        # fig = plt.figure('proj band', figsize=[3.5, 4.5], dpi=150) # for FIG.2
-        fig = plt.figure('proj band', figsize=[3.5, 3.5], dpi=150) # for FIG.3
-        # fig = plt.figure('proj band')
-        fig.clf()
-        ax = fig.add_subplot(111)
-        ax.axis([kpath.min(), kpath.max(), eemin, eemax])
-        ax.axhline(0, color='black', linewidth=0.5, linestyle='--', alpha=1)
-
-        for i in range(1, nline):
-            ax.axvline(x=kpath[i * self.nk // nline], linestyle='--', color='black', linewidth=0.5, alpha=1, zorder=101)
-
-        if xlabel is not None:
-            # xlabel = ['K', 'G', '-K', '-M', 'G', 'M', 'K']
-            num_xlabel = len(xlabel)
-            plt.xticks(kpath[np.arange(num_xlabel) * (self.nk // nline)], xlabel)
-
-        # S = 100 * np.sum(self.bandprjection, axis=0)
-        # S = 100 * self.bandprjection[3]
-        # S = 100 * np.sum(self.bandprjection[2:6], axis=0)
-        ax.plot(kpath, self.eig, linewidth=1, linestyle="-", color='k', alpha=0)
-        # ax.scatter(np.kron(kpath, np.ones([self.nb])).T, self.eig, color='red', s=proj[i], alpha=0.3)
-        cs = ax.scatter(np.kron(kpath, np.ones([self.nb])).T, self.eig, cmap=cmap, c=proj, s=3, alpha=1, vmin=vmin, vmax=vmax)
-
-        cbar = fig.colorbar(cs, ticks=np.linspace(vmin, vmax, 2))
-        cbar.ax.set_yticklabels(['Low', 'High'])
-        print('vmin={}, vmax={}'.format(vmin, vmax))
-
-        ax.set_ylabel('$Energy / (eV)$')
-
-        fig.tight_layout()
-        fig.show()
-        if savefname != None:
-            fig.savefig(savefname)
-
-    def plot_surfDOS(self, ee, surfDOS, eemin=-3.0, eemax=3.0, unit='D', cmap='seismic'):
-        import matplotlib.pyplot as plt
-        # import matplotlib.gridspec as gridspec
-        # from matplotlib.pyplot import subplot
-        from wanpy.core.toolkits import kmold
-
-        nk, ne = surfDOS.shape
-
-        # cmap = 'seismic'
-        nline = self.HSP_list.shape[0] - 1
-        xlabel = self.HSP_name
-        if unit.upper() == 'C':
-            kpath = kmold(self.HSP_path_car)
-        elif unit.upper() == 'D':
-            kpath = kmold(self.HSP_path_frac)
-        else:
-            kpath = None
-
-        '''
-          * plot band
-        '''
-        fig = plt.figure('dos', figsize=[4, 3], dpi=150)
-        fig.clf()
-        ax = fig.add_subplot(111)
-
-        ax.axis([kpath.min(), kpath.max(), eemin, eemax])
-        ax.axhline(0, color='k', linewidth=0.6, linestyle='-', alpha=1, zorder=10)
-
-        for i in range(1, nline):
-            ax.axvline(x=kpath[i * nk // nline], linestyle='-', color='k', linewidth=0.6, alpha=1, zorder=10)
-
-        if xlabel is not None:
-            # xlabel = ['K', 'G', '-K', '-M', 'G', 'M', 'K']
-            num_xlabel = len(xlabel)
-            plt.xticks(kpath[np.arange(num_xlabel) * (nk // nline)], xlabel)
-
-        kk = np.kron(np.ones([ne, 1]), kpath).T
-        ee = np.kron(np.ones([nk, 1]), ee)
-        # im = plt.contour(k, ek, a_k_ek, contourf_N, cmap=cmap, linewidth=0)
-        im = ax.contourf(kk, ee, surfDOS, 100, alpha=1, cmap=cmap, zorder=0)
-        fig.colorbar(im, ax=ax)
-
-        ax.set_ylabel('Energy (eV)')
-
-        fig.tight_layout()
-        fig.show()
-
-
-'''
-  etc.
+  h5 adaptor
 '''
 def hdf5_create_dataset(group, name, data, dtype, **kwds):
     if data is not None:
@@ -1742,30 +1077,4 @@ def hdf5_read_dataset(group, name, default=None):
         return data[()]
     else:
         return default
-
-# def f_none():
-#     """
-#       !!! Do not change the function name !!!
-#     """
-#     return None
-#
-# def list2str(alist):
-#     astr = ';'.join(alist)
-#     return astr
-#
-# def str2list(astr):
-#     alist = astr.split(';')
-#     return alist
-#
-# def trans_npz_2_hdf5(seedname=r'htb'):
-#     htb = Htb()
-#     htb.load_npz(seedname+'.npz')
-#
-#     cell = Cell()
-#     for i in ['name', 'lattice', 'latticeG', 'N', 'ions', 'ions_car']:
-#         cell.__dict__[i] = htb.cell.__dict__[i]
-#     cell.spec = htb.cell.__dict__['spec']
-#     htb.cell = cell
-#
-#     htb.save_h5(seedname+'.h5')
 

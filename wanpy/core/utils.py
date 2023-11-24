@@ -11,10 +11,31 @@
 
 __date__ = "Mar. 30, 2023"
 
+import re
+import math
 import numpy as np
 from numpy import linalg as LA
 from scipy.spatial.transform import Rotation as scipy_rot
 
+__all__ = [
+    # Symmetry functions
+    'get_op_cartesian',
+    'get_ntheta_from_rotmatrix',
+    'print_symmops',
+    # I/O
+    'wannier90_read_rr',
+    'wannier90_read_hr',
+    'wannier90_load_wcc',
+    'wannier90_load_wsvec',
+    'wannier90_read_spin',
+    'wannier90_read_rr_v2x',
+    # Criterion
+    'wanpy_check_if_uudd_amn',
+]
+
+"""
+  Symmetry functions
+"""
 def get_op_cartesian(symmop):
     """
     Get O(3) rotation matrix from symmop
@@ -62,3 +83,192 @@ def print_symmops(symmops):
         ))
     print('')
     print('* TR = 0 (without TR) or TR = 1 (with TR)')
+
+"""
+  I/O functions
+"""
+def wannier90_read_hr(fname):
+    with open(fname, 'r') as hr_file:
+        hr_file.readline()
+
+        nw = int(hr_file.readline().strip())
+        nR = int(hr_file.readline().strip())
+
+        ndegen = np.zeros((nR), dtype='int64')
+        index = 0
+        for i in range(math.ceil(nR / 15)):
+            for j in hr_file.readline().split():
+                ndegen[index] = int(j)
+                index += 1
+
+        R = np.zeros((nR, 3), dtype='int64')
+        hr_Rmn = np.zeros((nR, nw, nw), dtype='complex128')
+        for nrpts_i in range(nR):
+
+            for m in range(nw):
+                for n in range(nw):
+                    inline = hr_file.readline().split()
+                    inline_m = int(inline[3]) - 1
+                    inline_n = int(inline[4]) - 1
+                    hr_Rmn[nrpts_i, inline_m, inline_n] = complex(float(inline[5]), float(inline[6]))
+            R[nrpts_i] = np.array(inline[:3], dtype='int64')
+
+    return nw, nR, ndegen, R, hr_Rmn
+
+def wannier90_read_rr(fname):
+    with open(fname, 'r') as r_file:
+        r_file.readline()
+        nw = int(r_file.readline().strip())
+        nR = int(r_file.readline().strip())
+
+        R = np.zeros((nR, 3), dtype='int64')
+        r_Ramn = np.zeros((nR, 3, nw, nw), dtype='complex128')
+        for nrpts_i in range(nR):
+
+            for m in range(nw):
+                for n in range(nw):
+                    inline = r_file.readline().split()
+                    inline_m = int(inline[3]) - 1
+                    inline_n = int(inline[4]) - 1
+                    r_Ramn[nrpts_i, 0, inline_m, inline_n] = np.complex(float(inline[5]), float(inline[6]))
+                    r_Ramn[nrpts_i, 1, inline_m, inline_n] = np.complex(float(inline[7]), float(inline[8]))
+                    r_Ramn[nrpts_i, 2, inline_m, inline_n] = np.complex(float(inline[9]), float(inline[10]))
+
+            R[nrpts_i] = np.array(inline[:3], dtype='int64')
+
+    return r_Ramn
+
+def wannier90_read_spin(fname):
+    with open(fname, 'r') as f:
+        f.readline()
+        nw = int(f.readline().strip())
+        nR = int(f.readline().strip())
+
+        R = np.zeros([nR, 3], dtype='int64')
+        spin0_Rmn = np.zeros([nR, nw, nw], dtype='complex128')
+        spin_Ramn = np.zeros([nR, 3, nw, nw], dtype='complex128')
+        for nrpts_i in range(nR):
+            for m in range(nw):
+                for n in range(nw):
+                    inline = f.readline().split()
+                    inline_m = int(inline[3]) - 1
+                    inline_n = int(inline[4]) - 1
+                    spin0_Rmn[nrpts_i, inline_m, inline_n] = np.complex(float(inline[5]), float(inline[6]))
+                    spin_Ramn[nrpts_i, 0, inline_m, inline_n] = np.complex(float(inline[7]), float(inline[8]))
+                    spin_Ramn[nrpts_i, 1, inline_m, inline_n] = np.complex(float(inline[9]), float(inline[10]))
+                    spin_Ramn[nrpts_i, 2, inline_m, inline_n] = np.complex(float(inline[11]), float(inline[12]))
+
+            R[nrpts_i] = np.array(inline[:3], dtype='int64')
+
+    return spin0_Rmn, spin_Ramn
+
+def wannier90_read_rr_v2x(fname, nR):
+    """
+     interface with wannier90 v2.x
+    """
+    with open(fname, 'r') as r_file:
+        r_file.readline()
+        nw = int(r_file.readline().strip())
+
+        R = np.zeros((nR, 3), dtype='int64')
+        r_Ramn = np.zeros((nR, 3, nw, nw), dtype='complex128')
+        for nrpts_i in range(nR):
+
+            for m in range(nw):
+                for n in range(nw):
+                    inline = r_file.readline().split()
+                    inline_m = int(inline[3]) - 1
+                    inline_n = int(inline[4]) - 1
+                    r_Ramn[nrpts_i, 0, inline_m, inline_n] = np.complex(float(inline[5]), float(inline[6]))
+                    r_Ramn[nrpts_i, 1, inline_m, inline_n] = np.complex(float(inline[7]), float(inline[8]))
+                    r_Ramn[nrpts_i, 2, inline_m, inline_n] = np.complex(float(inline[9]), float(inline[10]))
+
+            R[nrpts_i] = np.array(inline[:3], dtype='int64')
+
+    return r_Ramn
+
+def wannier90_load_wcc(fname, shiftincell=False, check_if_uudd_amn=True):
+    lattice = np.zeros((3, 3), dtype='float64')
+    with open(fname, 'r') as f:
+        inline = f.readline()
+        while 'Lattice Vectors' not in inline:
+            inline = f.readline()
+        lattice[:, 0] = np.array(re.findall(r'.\d+\.\d+', f.readline()), dtype='float64')
+        lattice[:, 1] = np.array(re.findall(r'.\d+\.\d+', f.readline()), dtype='float64')
+        lattice[:, 2] = np.array(re.findall(r'.\d+\.\d+', f.readline()), dtype='float64')
+        while 'Number of Wannier Functions' not in inline:
+            inline = f.readline()
+        nw = int(re.findall(r'\d+', inline)[0])
+        wcc = np.zeros((nw, 3), dtype='float64')
+        wbroaden = np.zeros(nw, dtype='float64')
+        while inline != ' Final State\n':
+            inline = f.readline()
+        for i in range(nw):
+            inline = np.array(re.findall(r'.\d+\.\d+', f.readline()), dtype='float64')
+            wcc[i] = inline[:3]
+            wbroaden[i] = inline[-1]
+    f.close()
+
+    wccf = LA.multi_dot([LA.inv(lattice), wcc.T]).T
+    if shiftincell:
+        wccf = np.remainder(wccf, np.array([1, 1, 1]))
+        wcc = LA.multi_dot([lattice, wccf.T]).T
+
+    if check_if_uudd_amn:
+        if_uudd_amn = wanpy_check_if_uudd_amn(wcc, wbroaden)
+        if not if_uudd_amn:
+            print('\033[0;31m.amn is not in uudd order \033[0m')
+            print('\033[0;31mone may use twist_amn to reorganize the .amn file into the uudd order, and then perform the disentanglement process again.  \033[0m')
+        else:
+            print("\033[92m.amn is in uudd order\033[0m")
+    return wcc, wccf, wbroaden
+
+def wannier90_load_wsvec(fname, nw, nR):
+    max_ndegenT = 8  # max number of unit cells that can touch
+
+    R = np.zeros([nR, 3], dtype='int64')
+    ndegenT = np.zeros([nR, nw, nw], dtype='int64')
+    invndegenT = np.zeros([max_ndegenT, nR, nw, nw], dtype='float64')
+    wsvecT = np.zeros([max_ndegenT, nR, nw, nw, 3], dtype='int64')
+
+    with open(fname, 'r') as f:
+        f.readline()
+        for iR in range(nR):
+            for wm in range(nw):
+                for wn in range(nw):
+                    inline = np.array(f.readline().split(), dtype='int64')
+                    m, n = inline[3:] - 1
+                    R[iR] = inline[:3]
+                    _ndegenT = int(f.readline())
+                    ndegenT[iR, m, n] = _ndegenT
+                    invndegenT[:_ndegenT, iR, m, n] = 1 / _ndegenT
+                    for j in range(_ndegenT):
+                        wsvecT[j, iR, m, n] = np.array(f.readline().split(), dtype='int64')
+
+    max_ndegenT = np.max(ndegenT)
+    wsvecT = wsvecT[:max_ndegenT]
+    invndegenT = invndegenT[:max_ndegenT]
+
+    return invndegenT, wsvecT
+
+"""
+  Criterion
+"""
+def wanpy_check_if_uudd_amn(wcc, wbroaden):
+    nw = wcc.shape[0]
+
+    # test uudd
+    _wcc = wcc.reshape([2, nw // 2, 3])
+    _wbroaden = wbroaden.reshape([2, nw // 2])
+    distance_uudd = np.sum((_wcc[1] - _wcc[0]) ** 2) / nw
+    maxdiff_broden_uudd = np.max(np.abs(_wbroaden[1] - _wbroaden[0]))
+
+    # test udud
+    _wcc = wcc.reshape([nw // 2, 2, 3])
+    _wbroaden = wbroaden.reshape([nw // 2, 2])
+    distance_udud = np.sum((_wcc[1] - _wcc[0]) ** 2) / nw
+    maxdiff_broden_udud = np.max(np.abs(_wbroaden[1] - _wbroaden[0]))
+
+    if_uudd_amn = (distance_udud > 0.1 > distance_uudd) or (maxdiff_broden_udud > 0.1 > maxdiff_broden_uudd)
+    return if_uudd_amn
+

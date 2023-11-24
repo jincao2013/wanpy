@@ -32,10 +32,10 @@ def handle_wannier(args):
 
     efermi = args.efermi
     if args.efermi is None:
-        fermi = 0.0
+        efermi = 0.0
         if os.path.exists('vasprun.xml'):
-            fermi = float(re.findall('.\d+.\d+', os.popen('grep efermi vasprun.xml').readline())[0])
-            print('fermi level is {} readed from vasprun.xml'.format(fermi))
+            efermi = float(re.findall('.\d+.\d+', os.popen('grep efermi vasprun.xml').readline())[0])
+            print('fermi level is {} readed from vasprun.xml'.format(efermi))
 
     if args.cal_spin:
         print('WAVECAR will be used for interpolating spin operator.')
@@ -52,9 +52,9 @@ def handle_wannier(args):
             cell = Cell()
             cell.load_poscar('POSCAR')
             symmops = cell.get_msg(win.magmoms, win.symprec, info=True)
-    wanrun = WannierInterpolation(fermi, seedname=args.seedname,
+    wanrun = WannierInterpolation(efermi, seedname=args.seedname,
                                   symmetric_htb=args.symmetry, ngridR_symmhtb=ngridR_symmhtb, symmops=symmops,
-                                  uudd_amn=True,
+                                  check_if_uudd_amn=True,
                                   verbose=args.verbose
                                   )
     wanrun.run(cal_r=args.cal_r, cal_spin=args.cal_spin,
@@ -88,7 +88,7 @@ def handle_htb(args):
     htb = Htb(fermi)
 
     T0 = time.time()
-    htb.load_wannier90_dat(seedname=args.seedname, load_wsvec=args.load_wsvec, uudd_amn=True)
+    htb.load_wannier90_dat(seedname=args.seedname, load_wsvec=args.load_wsvec)
     T1 = time.time()
     print('complete loading hamiltonian from {}, time consuming {:.3f} s'.format(args.seedname, T1-T0))
 
@@ -140,9 +140,17 @@ def handle_write_dat(args):
         htb.save_wannier90_r_dat(fmt=fmt)
 
 def handle_twist_amn(args):
-    from wanpy.interface.wannier90 import W90_amn
+    from wanpy import wannier90_load_wcc, wanpy_check_if_uudd_amn, W90_amn
+
+    if not args.skip_check:
+        wcc, wccf, wbroaden = wannier90_load_wcc('wannier90.wout', shiftincell=False, check_if_uudd_amn=False)
+        is_uudd_amn = wanpy_check_if_uudd_amn(wcc, wbroaden)
+        is_udud_amn = not is_uudd_amn
 
     if args.twist_type == 'udud_to_uudd':
+        if is_uudd_amn:
+            print('\033[91mThe .amn file is in udud order. No action has been taken.\033[0m')
+            return
         os.rename('wannier90.amn', 'wannier90_udud.amn')
         print('found wannier90.amn')
         print('this will twist .amn order from udud to uudd')
@@ -152,6 +160,9 @@ def handle_twist_amn(args):
         AMN.save_w90('wannier90_uudd.amn')
         os.system('ln -s wannier90_uudd.amn wannier90.amn')
     elif args.twist_type == 'uudd_to_udud':
+        if is_udud_amn:
+            print('\033[91mThe .amn file is in uudd order. No action has been taken.\033[0m')
+            return
         os.rename('wannier90.amn', 'wannier90_uudd.amn')
         print('found wannier90.amn')
         print('this will twist .amn order from uudd to udud')
@@ -160,6 +171,8 @@ def handle_twist_amn(args):
         AMN.amn = np.einsum('knsi->knis', AMN.amn.reshape([AMN.nk, AMN.nb, 2, AMN.nw//2])).reshape([AMN.nk, AMN.nb, -1])
         AMN.save_w90('wannier90_udud.amn')
         os.system('ln -s wannier90_uudd.amn wannier90.amn')
+    else:
+        print('unknown twist_type')
 
 def main():
     # fermi_vasprun = 0
@@ -212,7 +225,9 @@ def main():
     ''' Subparser for the twist_amn command '''
     twist_amn_parser = subparsers.add_parser('twist_amn', help='wanpy twist_amn [options]')
     twist_amn_parser.add_argument('-t', '--type', action='store', type=str, dest='twist_type', default='udud_to_uudd',
-                                  help='default is udud_to_uudd')
+                                  help='udud_to_uudd or uudd_to_udud, default is udud_to_uudd')
+    twist_amn_parser.add_argument('--skip_check', action='store_true', dest='skip_check',
+                                  help='skip check the amn order from .wout, default is False')
 
     args = parser.parse_args()
 
@@ -220,9 +235,9 @@ def main():
         handle_wannier(args)
     elif args.command == 'htb':
         handle_htb(args)
-    elif args.comand == 'write_dat':
+    elif args.command == 'write_dat':
         handle_write_dat(args)
-    elif args.comand == 'twist_amn':
+    elif args.command == 'twist_amn':
         handle_twist_amn(args)
     else:
         print("Unknown command")
@@ -236,6 +251,8 @@ parse_symmetry = man        # Options: {man, auto}
 # Parameters used when parse_symmetry = auto
 symprec = 1e-5
 &magmoms
+0 0 1
+0 0 -1
 /
 
 # Parameters used when parse_symmetry = man
