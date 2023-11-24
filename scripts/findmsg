@@ -57,10 +57,6 @@ def print_spg(cell_nonmag, latt, symprec=1e-5):
     tau[np.abs(tau) < 1e-5] = 0
     n_operations = rot.shape[0]
     symmops = [get_ntheta_from_rotmatrix(0, tau[i], latt @ rot[i] @ LA.inv(latt)) for i in range(n_operations)]
-    for i in rot:
-        print(latt @ i @ LA.inv(latt))
-    for i in symmops:
-        print(i)
 
     print('-' * 100)
     # print('  Space group')
