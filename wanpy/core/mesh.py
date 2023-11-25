@@ -11,7 +11,9 @@
 
 __date__ = "Aug. 11, 2017"
 
+import time
 import numpy as np
+from numpy import linalg as LA
 
 __all__ = [
     'make_ws_gridR',

@@ -21,6 +21,7 @@ __all__ = [
     # Matrix operations
     'commdot',
     'anticommdot',
+    'esum',
     # Symmetry functions
     'get_op_cartesian',
     'get_ntheta_from_rotmatrix',
@@ -41,6 +42,9 @@ __all__ = [
 """
 commdot = lambda A, B: A @ B - B @ A
 anticommdot = lambda A, B: A @ B + B @ A
+
+def esum(subscripts, *operands, optimize=True, **kwargs):
+    return np.einsum(subscripts, *operands, optimize=optimize, **kwargs)
 
 """
   Symmetry functions
@@ -263,7 +267,7 @@ def wannier90_load_wsvec(fname, nw, nR):
 """
   Criterion
 """
-def wanpy_check_if_uudd_amn(wcc, wbroaden):
+def wanpy_check_if_uudd_amn(wcc, wbroaden, info=False):
     nw = wcc.shape[0]
 
     # test uudd
@@ -275,8 +279,12 @@ def wanpy_check_if_uudd_amn(wcc, wbroaden):
     # test udud
     _wcc = wcc.reshape([nw // 2, 2, 3])
     _wbroaden = wbroaden.reshape([nw // 2, 2])
-    distance_udud = np.sum((_wcc[1] - _wcc[0]) ** 2) / nw
-    maxdiff_broden_udud = np.max(np.abs(_wbroaden[1] - _wbroaden[0]))
+    distance_udud = np.sum((_wcc[:,1,:] - _wcc[:,0,:]) ** 2) / nw
+    maxdiff_broden_udud = np.max(np.abs(_wbroaden[:,1] - _wbroaden[:,0]))
+
+    if info:
+        print('distance_uudd:{:14.6f},    maxdiff_broden_uudd:{:14.6f}'.format(distance_uudd, maxdiff_broden_uudd))
+        print('distance_udud:{:14.6f},    maxdiff_broden_udud:{:14.6f}'.format(distance_udud, maxdiff_broden_udud))
 
     if_uudd_amn = (distance_udud > 0.1 > distance_uudd) or (maxdiff_broden_udud > 0.1 > maxdiff_broden_uudd)
     return if_uudd_amn
