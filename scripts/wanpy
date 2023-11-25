@@ -13,9 +13,9 @@
 
 import time
 import os
-import sys
 import numpy as np
 import argparse
+# import sys
 # sys.path.append(os.environ.get('PYTHONPATH'))
 
 def handle_wannier(args):
