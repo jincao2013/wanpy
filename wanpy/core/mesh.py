@@ -11,23 +11,19 @@
 
 __date__ = "Aug. 11, 2017"
 
-import sys
-import time
 import numpy as np
-import numpy.linalg as LA
+
+__all__ = [
+    'make_ws_gridR',
+    'make_mesh',
+    'make_kpath',
+    'kmold',
+]
 
 '''
   * R mesh
 '''
 def make_ws_gridR(ngridR, latt, info=True):
-    '''
-    :param Rgrid:
-    :return:
-            nrpts: int
-            ndegen: list
-            irvec: [array([i1,i2,i3])]
-
-    '''
     # ***********
     # init
     # ***********
@@ -565,6 +561,14 @@ def make_gridR(N1, N2, N3):
     gridR = np.array([n1.reshape(N), n2.reshape(N), n3.reshape(N)]).T
     return gridR
 
+
+def kmold(kkc):
+    nk = kkc.shape[0]
+    kkc = kkc[1:, :] - kkc[:-1, :]
+    kkc = np.vstack([np.array([0, 0, 0]), kkc])
+    k_mold = np.sqrt(np.einsum('ka,ka->k', kkc, kkc))
+    k_mold = LA.multi_dot([np.tri(nk), k_mold])
+    return k_mold
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt

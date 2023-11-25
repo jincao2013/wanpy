@@ -11,18 +11,17 @@
 
 __date__ = "Otc. 21, 2020"
 
-import time
 import os
-import sys
-sys.path.append(os.environ.get('PYTHONPATH'))
-
 import numpy as np
 from numpy import linalg as LA
-
 from wanpy.core.structure import Htb
 import wanpy.response.response as res
 from wanpy.core.mesh import make_kpath
 
+__all__ = [
+    'cal_wilson_loop_on_2d_kplane',
+    'cal_chern_number',
+]
 
 '''
   * wilson loop
@@ -75,17 +74,16 @@ from wanpy.core.mesh import make_kpath
 #     pass
 
 
-
 def _cal_wilson_loop_on_a_closed_loop(htb, kk, bandindex, e2=1):
-    '''
+    """
       * calculae Wilson loop 
         W(C) = Int{A(k)*dk[C]} 
         on closed loop C
         
       Note. 
-        If use tb gauge (atomic gauge), e^{iGr} should be used in the last step of product,
-        if use wannier gauge (lattice gauge), e^{ibr} should be used in each step of products.
-    '''  #
+        For tb gauge (atomic gauge), e^{iGr} should be used in the last step of product,
+        For wannier gauge (lattice gauge), e^{ibr} should be used in each step of products.
+    """  #
     nk = kk.shape[0]
 
     # Dky = np.identity(i2-i1)
@@ -105,14 +103,17 @@ def _cal_wilson_loop_on_a_closed_loop(htb, kk, bandindex, e2=1):
     return theta
 
 def cal_wilson_loop_on_2d_kplane(htb, bandindex, e1=0, e2=1, e3=2, k3=0, nk1=30, nk2=30):
-    '''
+    """
 
-    :param i1, i2: track wannier center for bands index i1-i2
+    :param nk2:
+    :param nk1:
+    :param htb:
+    :param bandindex: track wannier center for given bandindex
     :param e1: direction to show wannier center
     :param e2: direction to integration
     :param e3: principle direction of plane
     :param k3: position of the 2D plane
-    '''
+    """
     theta = np.zeros([nk1, bandindex.shape[0]], dtype='float64')
     kk1 = np.linspace(0, 1, nk1 + 1)[:-1]
     for i in range(nk1):
@@ -177,9 +178,9 @@ if __name__ == '__main__' and Job == 'wloop':
     bandindex = np.array([0, 1, 2])
     kk1, theta = cal_wilson_loop_on_2d_kplane(htb, bandindex, e1=0, e2=1, e3=2, k3=0, nk1=30, nk2=30)
 
-    if os.environ.get('PYGUI') == 'True':
-        from wanpy.response.response_plot import plot_wloop
-        plot_wloop(kk1, theta, ymin=-0.8, ymax=0.8, s=10)
+    # if os.environ.get('PYGUI') == 'True':
+    #     from wanpy.response.response_plot import plot_wloop
+    #     plot_wloop(kk1, theta, ymin=-0.8, ymax=0.8, s=10)
 
     '''
       * par 

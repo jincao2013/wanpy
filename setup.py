@@ -1,5 +1,5 @@
 from setuptools import setup
-from wanpy.env import __version__, __author__, __email__
+from wanpy import __version__, __author__, __email__
 
 packages_wanpy = [
     'wanpy',

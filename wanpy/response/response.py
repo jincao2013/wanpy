@@ -11,23 +11,53 @@
 
 __date__ = "May. 24, 2020"
 
-
-import time
-import os
-import sys
-sys.path.append(os.environ.get('PYTHONPATH'))
-
 import numpy as np
 from numpy import linalg as LA
-from enum import Enum, unique
-
-from wanpy.core.structure import BandstructureHSP
-from wanpy.core.mesh import make_kpath
-
+from enum import Enum
+from wanpy.core.utils import commdot, anticommdot
 from wanpy.core.bz import gauss_Delta_func, adapted_gauss_Delta_func
 from wanpy.core.bz import get_adaptive_ewide_II, get_adaptive_ewide_III
-from wanpy.core.bz import FD_zero, FD, fermi_dirac_func
+from wanpy.core.bz import FD_zero, fermi_dirac_func
 from wanpy.core.units import *
+
+__all__ = [
+    'Res_dim_coeff',
+    'Res_unit',
+    'get_fft001',
+    'get_fft_d2',
+    'get_fft_withzeeman',
+    'get_hk',
+    'get_Dk',
+    'cal_band',
+    'cal_berry_curvature',
+    'cal_berry_curvature_apply_Efield',
+    'cal_berry_curvature_apply_Bfield',
+    'cal_dos',
+    'cal_int_dos',
+    'cal_jdos',
+    'cal_static_polarization_function',
+    'cal_dielectric_function',
+    'cal_dielectric_function_manyEf',
+    'get_epsilon_rpa',
+    'get_vqchi0',
+    'cal_shift_current_Rshift_abc',
+    'cal_shift_current_Rshift_all',
+    'cal_shift_current_Retarded',
+    'cal_LPGE_Retarded_d1_211',
+    'cal_LPGE_Retarded_d2_220',
+    'cal_LPGE_Retarded_d2_210',
+    'cal_LPGE_Retarded_d1',
+    'cal_LPGE_Retarded_d2',
+    'cal_CPGE_2D',
+    'cal_CPGE_3D',
+    'cal_CPGE',
+    'cal_CPGE_Retarded',
+    'cal_bc_dipole',
+    'cal_SHG_prb1998',
+    'cal_shg_nagaosa',
+    'cal_linear_L_MOKE',
+    'cal_2nd_L_MOKE',
+]
 
 '''
   * unit 
@@ -178,7 +208,7 @@ def _get_fft_d3(htb, k, a, b, c):
 
 def get_fft_withzeeman(htb, k, B, sym_h=True, sym_r=True):
 
-    # N.B. this function can only used for soc htb
+    # N.B. this function can only be used for soc htb
     #      only spin zeeman is included
 
     op_spin = np.array([
@@ -248,34 +278,34 @@ def cal_band(htb, k, returnU=False, tbgauge=False, use_ws_distance=False):
     else:
         return E
 
-def cal_band_HSP(htb, HSP_list, nk1=101, HSP_name=None):
-    kpath = make_kpath(HSP_list, nk1)
-    kpath_car = LA.multi_dot([htb.cell.latticeG, kpath.T]).T
+# def cal_band_HSP(htb, HSP_list, nk1=101, HSP_name=None):
+#     kpath = make_kpath(HSP_list, nk1)
+#     kpath_car = LA.multi_dot([htb.cell.latticeG, kpath.T]).T
+#
+#     nk = kpath.shape[0]
+#     bandE = np.zeros([nk, htb.nw], dtype='float64')
+#
+#     for i, k in zip(range(nk), kpath):
+#         print('[{:>3d}/{:<3d}] {} Cal k at ({:.3f} {:.3f} {:.3f})'.format(
+#             i + 1, nk,
+#             time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
+#             k[0], k[1], k[2]
+#         )
+#         )
+#         bandE[i] = cal_band(htb, k)
+#
+#     bandstructure_hsp = BandstructureHSP()
+#     bandstructure_hsp.eig = bandE
+#     bandstructure_hsp.HSP_list = HSP_list
+#     bandstructure_hsp.HSP_path_frac = kpath
+#     bandstructure_hsp.HSP_path_car = kpath_car
+#     bandstructure_hsp.HSP_name = HSP_name
+#     bandstructure_hsp.nk, bandstructure_hsp.nb = nk, htb.nw
+#
+#     return bandstructure_hsp
 
-    nk = kpath.shape[0]
-    bandE = np.zeros([nk, htb.nw], dtype='float64')
-
-    for i, k in zip(range(nk), kpath):
-        print('[{:>3d}/{:<3d}] {} Cal k at ({:.3f} {:.3f} {:.3f})'.format(
-            i + 1, nk,
-            time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
-            k[0], k[1], k[2]
-        )
-        )
-        bandE[i] = cal_band(htb, k)
-
-    bandstructure_hsp = BandstructureHSP()
-    bandstructure_hsp.eig = bandE
-    bandstructure_hsp.HSP_list = HSP_list
-    bandstructure_hsp.HSP_path_frac = kpath
-    bandstructure_hsp.HSP_path_car = kpath_car
-    bandstructure_hsp.HSP_name = HSP_name
-    bandstructure_hsp.nk, bandstructure_hsp.nb = nk, htb.nw
-
-    return bandstructure_hsp
-
-def cal_band_apply_Efield(htb, k):
-    pass
+# def cal_band_apply_Efield(htb, k):
+#     pass
 
 def cal_berry_curvature(htb, k, ewide=0.02):
     # ewide should be seted as 0.1 times of the minimal energy difference, or using adapted smearing
@@ -316,33 +346,33 @@ def cal_berry_curvature_apply_Bfield(htb, k, B, ewide=0.02):
 
     return E, bc
 
-def cal_berry_curvature_HSP(htb, HSP_list, nk1=101, HSP_name=None, ewide=0.01):
-    kpath = make_kpath(HSP_list, nk1)
-    kpath_car = LA.multi_dot([htb.cell.latticeG, kpath.T]).T
-
-    nk = kpath.shape[0]
-    bandE = np.zeros([nk, htb.nw], dtype='float64')
-    BC = np.zeros([3, nk, htb.nw], dtype='float64')
-
-    for i, k in zip(range(nk), kpath):
-        print('[{:>3d}/{:<3d}] {} Cal k at ({:.3f} {:.3f} {:.3f})'.format(
-            i + 1, nk,
-            time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
-            k[0], k[1], k[2]
-        )
-        )
-        bandE[i], BC[:, i, :] = cal_berry_curvature(htb, k, ewide)
-
-    bandstructure_hsp = BandstructureHSP()
-    bandstructure_hsp.eig = bandE
-    bandstructure_hsp.BC = BC
-    bandstructure_hsp.HSP_list = HSP_list
-    bandstructure_hsp.HSP_path_frac = kpath
-    bandstructure_hsp.HSP_path_car = kpath_car
-    bandstructure_hsp.HSP_name = HSP_name
-    bandstructure_hsp.nk, bandstructure_hsp.nb = nk, htb.nw
-
-    return bandstructure_hsp
+# def cal_berry_curvature_HSP(htb, HSP_list, nk1=101, HSP_name=None, ewide=0.01):
+#     kpath = make_kpath(HSP_list, nk1)
+#     kpath_car = LA.multi_dot([htb.cell.latticeG, kpath.T]).T
+#
+#     nk = kpath.shape[0]
+#     bandE = np.zeros([nk, htb.nw], dtype='float64')
+#     BC = np.zeros([3, nk, htb.nw], dtype='float64')
+#
+#     for i, k in zip(range(nk), kpath):
+#         print('[{:>3d}/{:<3d}] {} Cal k at ({:.3f} {:.3f} {:.3f})'.format(
+#             i + 1, nk,
+#             time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
+#             k[0], k[1], k[2]
+#         )
+#         )
+#         bandE[i], BC[:, i, :] = cal_berry_curvature(htb, k, ewide)
+#
+#     bandstructure_hsp = BandstructureHSP()
+#     bandstructure_hsp.eig = bandE
+#     bandstructure_hsp.BC = BC
+#     bandstructure_hsp.HSP_list = HSP_list
+#     bandstructure_hsp.HSP_path_frac = kpath
+#     bandstructure_hsp.HSP_path_car = kpath_car
+#     bandstructure_hsp.HSP_name = HSP_name
+#     bandstructure_hsp.nk, bandstructure_hsp.nb = nk, htb.nw
+#
+#     return bandstructure_hsp
 
 
 '''
@@ -1214,7 +1244,7 @@ def cal_shg_nagaosa(htb, ee, k, gate, ewide, tensorIndex, adewide=False):
   * linear and non-linear MO
 '''
 def cal_linear_L_MOKE(htb, dyy):
-    '''
+    """
     Linear Longitudinal MOKE
     * y-axis is chosen to be parallel to both the direction of the magnetization and the plane of incidence
     * theta_i=np.pi/4
@@ -1223,7 +1253,7 @@ def cal_linear_L_MOKE(htb, dyy):
     RS1 = 1 + dim_coeff * (RS[0] / NK)
     RS2 = dim_coeff * (RS[1] / NK)
     dyy = RS1 + 1j * RS2
-    '''
+    """
     phi = -1 / np.sqrt(2) / (dyy - 1) ** 2
     phi_p = phi * (1 + 1 / np.sqrt(2 * dyy - 1)) * (360 / 2 / np.pi)
     phi_s = phi * (1 - 1 / np.sqrt(2 * dyy - 1)) * (360 / 2 / np.pi)
@@ -1231,45 +1261,13 @@ def cal_linear_L_MOKE(htb, dyy):
 
 
 def cal_2nd_L_MOKE(htb):
-    '''
+    """
     2nd order Longitudinal MOKE
     * y-axis is chosen to be parallel to both the direction of the magnetization and the plane of incidence
     * theta_i=np.pi/4
-    '''
+    """
 
     pass
 
 
-'''
-  * etc.
-'''
-# def _get_AD_wi(htb, W, fix_wi=0.01, ewide_min, ewide_max):
-#     if fix_wi:
-#         Wi = fixed_wi
-#     else:
-#         Wi = np.copy(W)
-#         Wi[Wi < minmalWi] = minmalWi
-#         Wi[Wi > maxmalWi] = maxmalWi
-#     return Wi
 
-
-'''
-  * print
-'''
-def printk(i, nk, k, sep=1):
-    if i % sep == 0:
-        print('[{:>3d}/{:<3d}] {} Cal k at ({:.3f} {:.3f} {:.3f})'.format(
-            i+1, nk,
-            time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
-            k[0], k[1], k[2]
-            )
-        )
-
-'''
-  * tools
-'''
-def commdot(A, B):
-    return A @ B - B @ A
-
-def anticommdot(A, B):
-    return A @ B + B @ A

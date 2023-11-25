@@ -18,6 +18,9 @@ from numpy import linalg as LA
 from scipy.spatial.transform import Rotation as scipy_rot
 
 __all__ = [
+    # Matrix operations
+    'commdot',
+    'anticommdot',
     # Symmetry functions
     'get_op_cartesian',
     'get_ntheta_from_rotmatrix',
@@ -32,6 +35,12 @@ __all__ = [
     # Criterion
     'wanpy_check_if_uudd_amn',
 ]
+
+"""
+  * Matrix operations
+"""
+commdot = lambda A, B: A @ B - B @ A
+anticommdot = lambda A, B: A @ B + B @ A
 
 """
   Symmetry functions

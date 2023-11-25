@@ -11,13 +11,16 @@
 
 __date__ = "Jan. 3, 2019"
 
-import matplotlib.pyplot as plt
+
 import numpy as np
 import numpy.linalg as LA
 from wanpy.core.units import *
-from wanpy.core.toolkits import eye_filter
 from scipy import special
 
+__all__ = [
+    'fermi_dirac_func',
+    'delta_func',
+]
 
 '''
   * K-point integration: special points way
@@ -170,11 +173,11 @@ def get_adaptive_ewide_II(v, dk, scaling=1, ewide_min=0.001):
     return W
 
 def get_adaptive_ewide_III(v, dk, scaling=1, ewide_min=0.001, ewide_max=None, dk_min=0.001):
-    '''
+    """
       EQ.35 in [PRB 75,195121(2007)]
       for JDOS type calculation
       * dk = (2Pi / L) / Nk
-    '''
+    """
     dk[dk < dk_min] = dk_min
     nw = v.shape[-1]
 
@@ -205,13 +208,13 @@ def get_adaptive_ewide_III(v, dk, scaling=1, ewide_min=0.001, ewide_max=None, dk
 
 
 def get_adaptive_ewide_II_slab(v, E, U, dk, N_ucell, open_boundary=-1, a=np.sqrt(2), ewide_min=0.001, dk_min=0.001, win=None):
-    '''
+    """
       Slab version of get_adaptive_ewide_II
       recover to get_adaptive_ewide_II when open_boundary = -1
 
       Algorithm:
       * For open boundary direction
-    '''
+    """
     dk[dk < dk_min] = dk_min
     nw = v.shape[-1]
     nw_uc = nw // N_ucell
@@ -226,11 +229,11 @@ def get_adaptive_ewide_II_slab(v, E, U, dk, N_ucell, open_boundary=-1, a=np.sqrt
     is_surf = None
 
     if open_boundary >= 0:
-        filter = eye_filter(nw, win)
+        eye_filter = get_eye_filter(nw, win)
 
         e1, e2 = np.meshgrid(E, E)
         invE = np.real(1 / (e2 - e1 - 1j * 1e-8))
-        r_ob = v_ob * invE * filter
+        r_ob = v_ob * invE * eye_filter
         r_ob = np.argmax(np.abs(r_ob), axis=0)
         W[open_boundary] = a * np.array([E[j] - E[i] for i, j in zip(range(nw), r_ob)])
 
@@ -247,12 +250,12 @@ def get_adaptive_ewide_II_slab(v, E, U, dk, N_ucell, open_boundary=-1, a=np.sqrt
 
 
 def get_adaptive_ewide_III_slab(v, E, U, dk, N_ucell, open_boundary=-1, scaling=np.sqrt(2), ewide_min=0.001, inf_CenterW=False, win=None):
-    '''
+    """
       Slab version of get_adaptive_ewide_III
       * recover to get_adaptive_ewide_III when open_boundary = -1.
       * The bulk quantum well states excitation are adapted as
         adaptive broaden.
-      * The broaden of surface states are seted as minimal ewide.
+      * The broadens of surface states are seted as minimal ewide.
       * htb.dk at open_boundary direction affect nothing.
 
       Algorithm descriptions:
@@ -262,7 +265,7 @@ def get_adaptive_ewide_III_slab(v, E, U, dk, N_ucell, open_boundary=-1, scaling=
           w_n = E_n - E_l                           (3)
           l = { l | max( <u_n|partial_k u_l> )}     (4)
           W_nm = |w_n - w_m|                        (5)
-    '''
+    """
     dk[dk < 0.001] = 0.001
     nw = v.shape[-1]
     nw_uc = nw // N_ucell
@@ -277,11 +280,11 @@ def get_adaptive_ewide_III_slab(v, E, U, dk, N_ucell, open_boundary=-1, scaling=
     is_surf = None
 
     if open_boundary >= 0:
-        filter = eye_filter(nw, win)
+        eye_filter = get_eye_filter(nw, win)
 
         e1, e2 = np.meshgrid(E, E)
         invE = np.real(1 / (e2 - e1 - 1j * 1e-8))
-        r_ob = v_ob * invE * filter
+        r_ob = v_ob * invE * eye_filter
         r_ob = np.argmax(np.abs(r_ob), axis=0)
         W[open_boundary] = scaling * np.array([E[j] - E[i] for i, j in zip(range(nw), r_ob)])
 
@@ -373,8 +376,20 @@ def lorentz_Delta_func(E, ee, ewide=0.02):
 def Rect(e, a, b, T=300):
     return FD(e, T, fermi=b) * (1 - FD(e, T, fermi=a))
 
+def get_eye_filter(N, F):
+    eye_filter = np.zeros([N, N])
+    if type(F) is int:
+        for i in range(-F + 1, F):
+            eye_filter += np.eye(N, k=i)
+    elif (type(F) is list) or (type(F) is tuple):
+        for i in F:
+            eye_filter += np.eye(N, N, i)
+    else:
+        eye_filter = np.ones([N, N])
+    return eye_filter
 
 if __name__ == "__main__":
+    import matplotlib.pyplot as plt
     smear = 0.1
     E = np.linspace(-1, 1, 1000)
     ismear = 3
@@ -390,7 +405,6 @@ if __name__ == "__main__":
         An = (-1) ** n / np.math.factorial(n) / 4 ** n / np.sqrt(np.pi)
         hermite = special.hermite(2 * n)
         delta1 += An * hermite(x) * np.exp(-x ** 2)
-
 
     plt.axvline(-smear, color='k', linewidth=0.4)
     plt.axvline(smear, color='k', linewidth=0.4)

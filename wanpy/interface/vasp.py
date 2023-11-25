@@ -26,6 +26,11 @@ except ModuleNotFoundError:
 else:
     pass
 
+__all__ = [
+    'VASP',
+    'VASP_EIGENVAL_HSP',
+    'VASP_wavecar',
+]
 
 class VASP(object):
 

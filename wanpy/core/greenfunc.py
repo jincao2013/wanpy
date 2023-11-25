@@ -14,8 +14,12 @@ __date__ = "Dec. 22, 2017"
 import numpy as np
 from numpy import linalg as LA
 
+__all__ = [
+    'self_energy'
+]
+
 def self_energy(hs, h0, h1, h2):
-    '''
+    """
     Fast inverse tri-diagonal (infinite large) matrix of the following form:
     H = [
         [ hs h1            ]
@@ -49,8 +53,7 @@ def self_energy(hs, h0, h1, h2):
     the intial conditions are:
     (5) a(0)=-h1, b(0)=-h2, g(0)=Inverse(h0), gs(0)=Inverse(hs)
     after N step interation, result=gs(N).
-
-    ''' #
+    """
     N = 8000
 
     # e = np.matlib.identity(h0.shape[0], dtype='complex128')
@@ -86,9 +89,9 @@ def fermi_dirac_dis_0T(e, fermi=0.0):
     return (1 - np.sign(e-fermi)) / 2
 
 class GreenWannier(object):
-    '''
+    """
       * GreenWannier Object
-    '''
+    """
     def __init__(self, e, k, hr, fermi=0., c=2, eps=1e-3):
         self.e = e + fermi
         self.k = k

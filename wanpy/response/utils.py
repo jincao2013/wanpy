@@ -12,6 +12,24 @@
 __date__ = "Mar. 20, 2023"
 
 import os
+import time
+
+__all__ = [
+    'printk',
+    'load_input_index_from_path',
+]
+
+'''
+  * print
+'''
+def printk(i, nk, k, sep=1):
+    if i % sep == 0:
+        print('[{:>3d}/{:<3d}] {} Cal k at ({:.3f} {:.3f} {:.3f})'.format(
+            i+1, nk,
+            time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
+            k[0], k[1], k[2]
+            )
+        )
 
 def load_input_index_from_path(wdir, MPI_main):
     rank2dict = {'x': 0, 'y': 1, 'z': 2}

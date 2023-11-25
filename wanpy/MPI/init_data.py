@@ -11,37 +11,16 @@
 
 __date__ = "Nov. 9, 2019"
 
-import os
 import sys
-sys.path.append(os.environ.get('PYTHONPATH'))
-
 import numpy as np
 import numpy.linalg as LA
-
 from wanpy.core.structure import Htb
-from wanpy.core.mesh import make_kmesh_dev001, make_mesh
+from wanpy.core.mesh import make_mesh
 
-
-class Config(object):
-
-    def __init__(self, input_dir, wdir):
-        pass
-
-# def init_kmesh(MPI, nkmesh, random_k=False, type='continuous', centersym=False, kcube=np.identity(3), kmesh_shift=0.):
-#     COMM = MPI.COMM_WORLD
-#     MPI_rank = COMM.Get_rank()
-#     MPI_ncore = COMM.Get_size()
-#     if MPI_rank == 0:
-#         kmesh = make_mesh(nkmesh, type=type, centersym=centersym, basis=kcube, mesh_shift=kmesh_shift, info=True)
-#         if random_k:
-#             np.random.shuffle(kmesh)
-#             print('complite shuffle kmesh. (Speed up --> valley type <-- band)')
-#     else:
-#         # kmesh = np.zeros([nkmesh[0] * nkmesh[1] * nkmesh[2], 3], dtype='float64')
-#         kmesh = None
-#
-#     # COMM.Bcast(kmesh, root=0)  # commented at Jun.9 2021, which may cause big memory occupation !
-#     return kmesh
+__all__ = [
+    'init_kmesh',
+    'init_htb_response_data',
+]
 
 def init_kmesh(MPI, nkmesh, random_k=False, type='continuous', centersym=False,
                diagbasis=True, kcube=np.identity(3), kmesh_shift=0.,
@@ -60,22 +39,6 @@ def init_kmesh(MPI, nkmesh, random_k=False, type='continuous', centersym=False,
         kmesh = None
 
     return kmesh
-
-# def init_kmesh_dev001(MPI, nkmesh, sample_method, KCUBE, random_k=False):
-#     COMM = MPI.COMM_WORLD
-#     MPI_rank = COMM.Get_rank()
-#     MPI_ncore = COMM.Get_size()
-#     if MPI_rank == 0:
-#         kmesh = make_kmesh_dev001(nkmesh[0], nkmesh[1], nkmesh[2], sample_method, KCUBE)
-#         if random_k:
-#             np.random.shuffle(kmesh)
-#             print('complite shuffle kmesh. (Speed up --> valley type <-- band)')
-#
-#     else:
-#         kmesh = None
-#
-#     kmesh = COMM.bcast(kmesh, root=0)
-#     return kmesh
 
 def init_htb_response_data(MPI, htb, tmin_h=-0.1, tmin_r=-0.1, open_boundary=-1, istb=False, use_wcc=False, atomic_wcc=False):
     COMM = MPI.COMM_WORLD

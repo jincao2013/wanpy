@@ -20,10 +20,6 @@ from wanpy.core.utils import wannier90_load_wcc
 from wanpy.core.units import *
 from wanpy.interface.wannier90 import *
 
-# import matplotlib.pyplot as plt
-# from wanpy.core.plot import *
-# from wanpy.response.response_plot import *
-
 __all__ = [
     'WannierInterpolation'
 ]
@@ -311,6 +307,9 @@ def check_htb_equ(htb1, htb2):
 
 
 if __name__ == "__main__":
+    # import matplotlib.pyplot as plt
+    # from wanpy.core.plot import *
+    # from wanpy.response.response_plot import *
     from wanpy.env import ROOT_WDIR
     wdir = os.path.join(ROOT_WDIR, r'wanpy_debug/buildwannier/MnPd')
     input_dir = os.path.join(ROOT_WDIR, r'wanpy_debug/buildwannier/MnPd')
