@@ -263,7 +263,7 @@ class Cell(object):
         tau = info_mag_dataset.get('translations')
         tau[np.abs(tau) < 1e-5] = 0
         TR = info_mag_dataset.get('time_reversals')
-        symmops = np.array([get_ntheta_from_rotmatrix(int(TR[i]), tau[i], latt @ rot[i] @ LA.inv(latt)) for i in range(n_operations)])
+        symmops = np.array([get_ntheta_from_rotmatrix(int(TR[i]), tau[i], latt @ rot[i] @ LA.inv(latt), atol=symprec) for i in range(n_operations)])
 
         if info:
             print('\n\nMagnetic space group for magnetic structure (symprec:{:10.7f} Angstrom)'.format(symprec))

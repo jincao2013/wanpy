@@ -34,6 +34,7 @@ __all__ = [
     'wannier90_read_spin',
     'wannier90_read_rr_v2x',
     # Criterion
+    'check_valid_symmops',
     'wanpy_check_if_uudd_amn',
 ]
 
@@ -60,7 +61,7 @@ def get_op_cartesian(symmop):
     op_cartesian[np.abs(op_cartesian)<1e-10] = 0
     return op_cartesian
 
-def get_ntheta_from_rotmatrix(TR, tau, rot_car):
+def get_ntheta_from_rotmatrix(TR, tau, rot_car, atol=1e-5):
     det = LA.det(rot_car)
     u, v = LA.eig(det * rot_car)
 
@@ -73,7 +74,7 @@ def get_ntheta_from_rotmatrix(TR, tau, rot_car):
     for theta in [_theta, 2*np.pi-_theta]:
         rot_car_test = det * scipy_rot.from_rotvec(theta * axis).as_matrix()
         rot_car_test[np.abs(rot_car_test) < 1e-10] = 0
-        if np.isclose(rot_car, rot_car_test, atol=1e-05).all():
+        if np.isclose(rot_car, rot_car_test, atol=atol).all():
             symmop = [TR, det, theta, nx, ny, nz, taux, tauy, tauz]
             break
 
@@ -267,6 +268,10 @@ def wannier90_load_wsvec(fname, nw, nR):
 """
   Criterion
 """
+def check_valid_symmops(symmops):
+    assert set([int(i) for i in symmops.T[0]]) <= {0, 1}
+    assert set([int(np.rint(i)) for i in symmops.T[1]]) <= {-1, 1}
+
 def wanpy_check_if_uudd_amn(wcc, wbroaden, info=False):
     nw = wcc.shape[0]
 

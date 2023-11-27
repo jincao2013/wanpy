@@ -19,7 +19,7 @@ from scipy.linalg import block_diag
 import sympy as sp
 from wanpy.core.errorhandler import WanpyError
 from wanpy.core.mesh import make_mesh, make_ws_gridR
-from wanpy.core.utils import get_op_cartesian
+from wanpy.core.utils import get_op_cartesian, check_valid_symmops
 from wanpy.core.units import *
 
 __all__ = [
@@ -95,7 +95,7 @@ class Symmetrize_Htb(object):
         # self.eiktau = np.exp(2j * np.pi * np.einsum('ka,ja->kj', self.meshk, wccf))
 
     def run(self, tmin=1e-6):
-        self.check_valid_symmops()
+        check_valid_symmops(self.symmops)
         htb = self.htb
         symmops, atoms_pos, atoms_orbi, soc = self.symmops, self.atoms_pos, self.atoms_orbi, self.soc
 
@@ -187,11 +187,6 @@ class Symmetrize_Htb(object):
         for i in range(3):
             self.htb.r_Ramn[self.htb.nR//2, i] *= 1 - np.eye(self.htb.nw)
             self.htb.r_Ramn[self.htb.nR//2, i] += np.diag(self.wcc.T[i])
-
-    def check_valid_symmops(self):
-        symmops = self.symmops
-        assert set([int(i) for i in symmops.T[0]]) <= {0, 1}
-        assert set([int(np.rint(i)) for i in symmops.T[1]]) <= {-1, 1}
 
     '''
       * F.T. between R-space and k-space
@@ -559,11 +554,11 @@ def parse_symmetry_inputfile(fname='symmetry.in'):
                         symmops_i = [float(i) for i in symmops_i]
                         symmops_i[2] = symmops_i[2]/180 * np.pi
                         symmops.append(symmops_i)
-                        assert int(symmops_i[0]) in [0, 1]
-                        assert int(symmops_i[1]) in [-1, 1]
     symmops = np.array(symmops)
     magmoms = np.array(magmoms)
     f.close()
+
+    check_valid_symmops(symmops)
 
     adict = {
         'ngridR': ngridR,

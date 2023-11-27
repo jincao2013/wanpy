@@ -20,7 +20,7 @@ def read_magmoms(filename, num_atoms):
             # print(magmoms[i])
     return magmoms
 
-def get_ntheta_from_rotmatrix(TR, tau, rot_car):
+def get_ntheta_from_rotmatrix(TR, tau, rot_car, atol=1e-5):
     det = LA.det(rot_car)
     u, v = LA.eig(det * rot_car)
 
@@ -33,7 +33,7 @@ def get_ntheta_from_rotmatrix(TR, tau, rot_car):
     for theta in [_theta, 2*np.pi-_theta]:
         rot_car_test = det * scipy_rot.from_rotvec(theta * axis).as_matrix()
         rot_car_test[np.abs(rot_car_test) < 1e-10] = 0
-        if np.isclose(rot_car, rot_car_test, atol=1e-05).all():
+        if np.isclose(rot_car, rot_car_test, atol=atol).all():
             symmop = [TR, det, theta, nx, ny, nz, taux, tauy, tauz]
             break
 
@@ -56,7 +56,12 @@ def print_spg(cell_nonmag, latt, symprec=1e-5):
     tau = info_spg_dataset.get('translations')
     tau[np.abs(tau) < 1e-5] = 0
     n_operations = rot.shape[0]
-    symmops = [get_ntheta_from_rotmatrix(0, tau[i], latt @ rot[i] @ LA.inv(latt)) for i in range(n_operations)]
+    symmops = [get_ntheta_from_rotmatrix(0, tau[i], latt @ rot[i] @ LA.inv(latt), atol=symprec) for i in range(n_operations)]
+
+    # for i in range(n_operations):
+    #     print(tau[i], rot[i])
+    #     print(symmops[i])
+    #     print('\n')
 
     print('-' * 100)
     # print('  Space group')
@@ -106,7 +111,7 @@ def print_msg(cell_mag, latt, symprec=1e-5):
     tau = info_mag_dataset.get('translations')
     tau[np.abs(tau) < 1e-5] = 0
     TR = info_mag_dataset.get('time_reversals')
-    symmops = [get_ntheta_from_rotmatrix(int(TR[i]), tau[i], latt @ rot[i] @ LA.inv(latt)) for i in range(n_operations)]
+    symmops = [get_ntheta_from_rotmatrix(int(TR[i]), tau[i], latt @ rot[i] @ LA.inv(latt), atol=symprec) for i in range(n_operations)]
 
     print('-' * 100)
     # print('  Magnetic space group')
