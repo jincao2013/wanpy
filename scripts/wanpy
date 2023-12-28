@@ -20,9 +20,8 @@ import argparse
 
 def handle_wannier(args):
     import re
-    from wanpy.core.structure import Cell
-    from wanpy.interface.buildwannier import WannierInterpolation
-    from wanpy.core.symmetry import parse_symmetry_inputfile
+    from wanpy import Cell, parse_symmetry_inputfile
+    from wanpy.interface import WannierInterpolation
 
     if args.write_temp:
         with open('symmetry.in', 'w') as f:
@@ -67,8 +66,7 @@ def handle_wannier(args):
 
 def handle_htb(args):
     import re
-    from wanpy.core.structure import Htb, Cell
-    from wanpy.core.symmetry import Symmetrize_Htb, get_proj_info, parse_symmetry_inputfile
+    from wanpy import Htb, Cell, Symmetrize_Htb, get_proj_info, parse_symmetry_inputfile
 
     efermi = args.efermi
     if args.efermi is None:
@@ -130,7 +128,7 @@ def handle_htb(args):
 #     print(args)
 
 def handle_write_dat(args):
-    from wanpy.core.structure import Htb
+    from wanpy import Htb
 
     fmt = str(6+args.decimals) + '.' + str(args.decimals)
     htb = Htb()
@@ -140,7 +138,8 @@ def handle_write_dat(args):
         htb.save_wannier90_r_dat(fmt=fmt)
 
 def handle_twist_amn(args):
-    from wanpy import wannier90_load_wcc, wanpy_check_if_uudd_amn, W90_amn
+    from wanpy import wannier90_load_wcc, wanpy_check_if_uudd_amn
+    from wanpy.interface import W90_amn
 
     if not args.skip_check:
         wcc, wccf, wbroaden = wannier90_load_wcc('wannier90.wout', shiftincell=False, check_if_uudd_amn=False)

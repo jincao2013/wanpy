@@ -190,3 +190,35 @@ if __name__ == "__main__":
         print('\n\nMagnetic space group for magnetic structure (symprec:{:10.7f} Angstrom)'.format(symprec))
         print_msg(cell_mag, latt, symprec=symprec)
         print('\n* TR = 0 (without TR) or TR = 1 (with TR)')
+
+# ''' debug '''
+# if __name__ == "__main__":
+#     os.chdir('/Users/jincao/Downloads/temp')
+#     fname_poscar = 'POSCAR'
+#     fname_magmoms = 'magmoms'
+#     symprec = 0.1
+#
+#     unitcell, optional_structure_info = read_crystal_structure(fname_poscar)
+#     num_atoms = unitcell.get_number_of_atoms()
+#     latt = unitcell.get_cell().T
+#
+#     cell_nonmag = (
+#         unitcell.get_cell(),
+#         # unitcell.get_positions(),
+#         unitcell.get_scaled_positions(),
+#         unitcell.get_atomic_numbers(),
+#         np.zeros_like(unitcell.get_atomic_numbers()),
+#     )
+#
+#     if fname_magmoms is not None:
+#         magmoms = read_magmoms(fname_magmoms, num_atoms)
+#         unitcell.set_magnetic_moments(magmoms)
+#         cell_mag = (
+#             unitcell.get_cell(),
+#             # unitcell.get_positions(),
+#             unitcell.get_scaled_positions(),
+#             unitcell.get_atomic_numbers(),
+#             unitcell.get_magnetic_moments(),
+#         )
+#
+#     primitive_cell = spglib.find_primitive(cell_mag, symprec=symprec)
