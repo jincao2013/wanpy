@@ -15,7 +15,7 @@ from .core.bz import fermi_dirac_func, delta_func
 from .core.greenfunc import self_energy
 from .core.mesh import make_ws_gridR, make_mesh, make_kpath, kmold
 from .core.structure import Cell, Worbi, Htb
-from .core.symmetry import Symmetrize_Htb, get_proj_info, parse_symmetry_inputfile
+from .core.symmetry import Symmetrize_Htb_kspace, Symmetrize_Htb_rspace, get_proj_info, parse_symmetry_inputfile
 from .core.trans_hr import Supercell_Htb, FT_htb
 from .core.utils import *
 from .core.units import *

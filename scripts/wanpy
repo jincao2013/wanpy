@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-
+import sys
 # Copyright (C) 2020 Jin Cao
 #
 # This file is distributed as part of the wanpy code and
@@ -15,7 +15,7 @@ import time
 import os
 import numpy as np
 import argparse
-# import sys
+import sys
 # sys.path.append(os.environ.get('PYTHONPATH'))
 
 def handle_wannier(args):
@@ -24,6 +24,9 @@ def handle_wannier(args):
     from wanpy.interface import WannierInterpolation
 
     if args.write_temp:
+        if os.path.exists('symmetry.in'):
+            print('file symmetry.in exist.')
+            sys.exit()
         with open('symmetry.in', 'w') as f:
             f.write(temp_input_file)
         f.close()
@@ -41,24 +44,28 @@ def handle_wannier(args):
 
     T0 = time.time()
     dat_fmt = '12.6'
-    ngridR_symmhtb, symmops = None, None
+    symmetric_method, ngridR_symmhtb, symmops = None, None, None
+
     if args.symmetry:
         dat_fmt = '16.10'
         win = parse_symmetry_inputfile('symmetry.in')
-        ngridR_symmhtb, symmops = win.ngridR, win.symmops
+        symmetric_method, ngridR_symmhtb, symmops = \
+            win.symmetric_method, win.ngridR, win.symmops
+
         if win.parse_symmetry == 'auto':
             print('Using magmoms to determine msg, the following msg is found: ')
             cell = Cell()
             cell.load_poscar('POSCAR')
             symmops = cell.get_msg(win.magmoms, win.symprec, info=True)
+
     wanrun = WannierInterpolation(efermi, seedname=args.seedname,
-                                  symmetric_htb=args.symmetry, ngridR_symmhtb=ngridR_symmhtb, symmops=symmops,
-                                  check_if_uudd_amn=True,
-                                  verbose=args.verbose
+                                  symmetric_htb=args.symmetry, symmetric_method=symmetric_method,
+                                  ngridR_symmhtb=ngridR_symmhtb, symmops=symmops,
+                                  check_if_uudd_amn=True
                                   )
     wanrun.run(cal_r=args.cal_r, cal_spin=args.cal_spin,
                write_h5=True, write_dat=args.write_dat, write_spn=args.write_spn,
-               h5decimals=args.h5decimals, fmt=dat_fmt
+               h5decimals=args.h5decimals, fmt=dat_fmt, iprint=args.verbose,
                )
     T1 = time.time()
 
@@ -66,7 +73,7 @@ def handle_wannier(args):
 
 def handle_htb(args):
     import re
-    from wanpy import Htb, Cell, Symmetrize_Htb, get_proj_info, parse_symmetry_inputfile
+    from wanpy import Htb, Cell, Symmetrize_Htb_kspace, get_proj_info, parse_symmetry_inputfile
 
     efermi = args.efermi
     if args.efermi is None:
@@ -76,10 +83,10 @@ def handle_htb(args):
             print('fermi level is {} readed from vasprun.xml'.format(fermi))
 
     # print instructions
-    print('One should check wcc before used for calculations.')
+    print('check the wcc before calculations.')
     print('Make sure the following setting in wannier90: ')
     print('guiding_centres      =  T')
-    print('translate_home_cell  =  F (it may shift the wcc with a lattice, which is far away from the inital projections)')
+    print('translate_home_cell  =  F (it may shift the wcc within a lattice, which is far from the initial projections.)')
     print('use_ws_distance      =  F (see J. Phys. Cond. Matt. 32, 165902 (2020))')
     # print('transl_inv           =  T')    # postw90 tag
 
@@ -92,22 +99,24 @@ def handle_htb(args):
 
     # symmetric wannier htb
     if args.symmetry:
-        print('symmetrizing wannier tb')
+        print('symmetrizing Wannier TB model')
         win = parse_symmetry_inputfile('symmetry.in')
-        ngridR_symmhtb, symmops = win.ngridR, win.symmops
+        symmetry_method, ngridR_symmhtb, symmops = \
+            win.symmetry_method, win.ngridR, win.symmops
+
         if win.parse_symmetry == 'auto':
             print('Using magmoms to determine msg, the following msg is found: ')
             cell = Cell()
             cell.load_poscar('POSCAR')
             symmops = cell.get_msg(win.magmoms, win.symprec, info=True)
         atoms_pos, atoms_orbi = get_proj_info(htb=htb)
-        symmhtb = Symmetrize_Htb(ngridR=ngridR_symmhtb,
-                                 htb=htb,
-                                 symmops=symmops,
-                                 atoms_pos=atoms_pos,
-                                 atoms_orbi=atoms_orbi,
-                                 soc=htb.worbi.soc
-                                 )
+        symmhtb = Symmetrize_Htb_kspace(ngridR=ngridR_symmhtb,
+                                        htb=htb,
+                                        symmops=symmops,
+                                        atoms_pos=atoms_pos,
+                                        atoms_orbi=atoms_orbi,
+                                        soc=htb.worbi.soc
+                                        )
         symmhtb.run()
         htb = symmhtb.htb
 
@@ -189,8 +198,8 @@ def main():
                                 help='if symmetrizing wannier tb, default is False')
     wannier_parser.add_argument('-r', '--ramn', action='store_true', dest='cal_r',
                                 help='if interpolat r operator, default is False')
-    wannier_parser.add_argument('--verbose', action='store_true', dest="verbose",
-                                help='be moderately verbose')
+    wannier_parser.add_argument('--verbose', action='store', type=int, dest="verbose", default=1,
+                                help='default is 1, set 2 to be more verbos.')
     wannier_parser.add_argument('--spin', action='store_true', dest='cal_spin',
                                 help='if interpolat spin operator, default is False')
     wannier_parser.add_argument('--spn', action='store_true', dest='write_spn',
@@ -242,10 +251,14 @@ def main():
         print("Unknown command")
 
 temp_input_file = """# Input file for building symmetric Wannier TB model
-ngridR = 12 12 1            # use a slightly larger value than the original TB model 
+
+# Choose method, default is kspace
+symmetric_method = rspace   # Options: {rspace, kspace}
 
 # Choose between manually setting symmops or automatically detecting symmops from magmoms
 parse_symmetry = man        # Options: {man, auto}
+
+ngridR = 12 12 1            # used in kspace method, and use a slightly larger value than the original TB model 
 
 # Parameters used when parse_symmetry = auto
 symprec = 1e-5

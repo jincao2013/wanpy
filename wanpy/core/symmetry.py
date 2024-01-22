@@ -23,37 +23,209 @@ from wanpy.core.utils import get_op_cartesian, check_valid_symmops
 from wanpy.core.units import *
 
 __all__ = [
-    'Symmetrize_Htb',
+    'Symmetrize_Htb_rspace',
+    'Symmetrize_Htb_kspace',
     'get_proj_info',
     'parse_symmetry_inputfile',
 ]
 
-# class MPointGroup(object):
-#
-#     def __init__(self):
-#         self.name = None
-#         self.latt = None
-#         self.lattG = None
-#         self.n_op = None
-#         self.elements = None
-#         self.op_axis = None
-#         self.op_fraction = None
-#         self.op_cartesian = None
-#         self.TR = None
-#
-#     def get_op_cartesian(self):
-#         self.n_op = len(self.op_axis)
-#         self.op_cartesian = np.zeros([self.n_op, 3, 3], dtype='float64')
-#         self.TR = np.zeros([self.n_op], dtype='float64')
-#         for i in range(self.n_op):
-#             _TR, det, theta, nx, ny, nz = self.op_axis[i]
-#             n = np.array([nx, ny, nz]) / LA.norm(np.array([nx, ny, nz]))
-#             rot = scipy_rot.from_rotvec(theta * n)
-#             self.op_cartesian[i] = det * rot.as_matrix()
-#             self.TR[i] = _TR
+class Symmetrize_Htb_rspace(object):
 
+    def __init__(self, htb, symmops, atoms_pos, atoms_orbi, soc, iprint=1):
+        self.htb = htb
+        self.latt = htb.latt
+        self.lattG = 2 * np.pi * LA.inv(self.latt.T)
+        self.nR = htb.nR
+        self.R = htb.R
+        self.Rc = htb.Rc
 
-class Symmetrize_Htb(object):
+        self.symmops = symmops
+        self.atoms_pos = atoms_pos
+        self.atoms_orbi = atoms_orbi
+        self.soc = soc
+
+        self.pos_car = (self.latt @ np.vstack(self.atoms_pos).T).T
+
+        self.nsymmops = symmops.shape[0]
+        self.ntype_atoms = len(atoms_pos)
+        self.npos = self.pos_car.shape[0]
+
+        self.list_nw_at_pos = np.zeros(self.npos, dtype='int64')
+        i = 0
+        for itype in range(self.ntype_atoms):
+            for ipos in range(self.atoms_pos[itype].shape[0]):
+                for l in self.atoms_orbi[itype]:
+                    self.list_nw_at_pos[i] += get_rep_atomic(self.symmops[0], int(l)).shape[0]
+                i += 1
+
+        self.nw_spinless = self.list_nw_at_pos.sum()
+
+        self.Rcij = np.einsum('ijRa->Rija', np.full((self.npos, self.npos, htb.nR, 3), self.Rc)) + \
+                    np.einsum('Rija->Rija', np.full((htb.nR, self.npos, self.npos, 3), self.pos_car)) - \
+                    np.einsum('Rjia->Rija', np.full((htb.nR, self.npos, self.npos, 3), self.pos_car))
+
+        self.wcc, self.wccf = self.get_atomic_wcc()
+        self.iprint = iprint
+
+    def run(self):
+        check_valid_symmops(self.symmops)
+        symmops, atoms_pos, atoms_orbi, soc = self.symmops, self.atoms_pos, self.atoms_orbi, self.soc
+        nw, nR, npos = self.htb.nw, self.nR, self.npos
+
+        # set ndegen = ones
+        htb = self.htb
+        hr_Rmn = np.einsum('R,Rmn->Rmn', 1 / htb.ndegen, htb.hr_Rmn, optimize=True)
+        r_Ramn = np.einsum('R,Ramn->Ramn', 1 / htb.ndegen, htb.r_Ramn, optimize=True)
+        ndegen = np.ones(nR, dtype='int64')
+
+        couting_init = np.ones([htb.nR, npos, npos], dtype='float64')
+        couting_Rij = np.zeros([htb.nR, npos, npos], dtype='float64')
+        hr_Rmn_symm = np.zeros([htb.nR, htb.nw, htb.nw], dtype='complex128')
+        # r_Ramn_symm = np.zeros([htb.nR, 3, htb.nw, htb.nw], dtype='complex128')
+
+        for isym in range(self.nsymmops):
+            print('Symmetrizing hr_kmn in real space {}/{}'.format(isym+1, self.nsymmops))
+            symmop = symmops[isym]
+            TR, det, alpha, nx, ny, nz, taux, tauy, tauz = symmop
+            tau = np.array([taux, tauy, tauz])
+            tau_car = self.latt @ tau
+
+            if self.iprint >= 2: print('\t', 'cal corep ')
+            corep, rep_pos = get_corep(symmop, self.latt, atoms_pos, atoms_orbi, soc)
+            rep_TRij, rep_TRmn = self.get_rep_TR(symmop, rep_pos)
+
+            if self.iprint >= 2: print('\t', 'track relevant matrix elements with symmetry ')
+            couting_Rij += np.einsum('TRij,mi,Rij,jn->Tmn', rep_TRij, rep_pos.T, couting_init, rep_pos, optimize=True)
+
+            if self.iprint >= 2: print('\t', 'rot hr_Rmn ')
+            if int(TR) == 0:
+                hr_Rmn_symm += np.einsum('TRij,mi,Rij,jn->Tmn', rep_TRmn, corep.T.conj(), hr_Rmn, corep, optimize=True)
+            elif int(TR) == 1:
+                hr_Rmn_symm += np.einsum('TRij,mi,Rij,jn->Tmn', rep_TRmn, corep.T.conj(), hr_Rmn, corep, optimize=True).conj()
+
+            if self.iprint >= 2: print()
+
+        hr_Rmn_symm /= self.nsymmops
+        # r_Ramn_symm /= self.nsymmops
+
+        print('process hopping at boundary of the super Wigner–Seitz cell')
+        couting_Rmn = self.extend_couting_Rij(couting_Rij)
+        symm_relevant = np.array(np.array(couting_Rmn, dtype='int64') == self.nsymmops, dtype='complex128')
+        hr_Rmn_symm = hr_Rmn_symm * symm_relevant
+
+        num_nonzero = np.count_nonzero(np.array(symm_relevant.real, dtype='int'))
+        print('{}% of irrelevant hopping with symmetry are dropped.'.format(
+            np.round(100 * (symm_relevant.size - num_nonzero) / symm_relevant.size, 1)
+        ))
+
+        # update ndegen, hr_Rmn, r_Ramn
+        print('update htb object ...')
+        self.htb.ndegen = ndegen
+        self.htb.hr_Rmn = hr_Rmn_symm
+        # self.htb.r_Ramn = r_Ramn_symm
+
+        # update wcc, wccf, and diagonal part of r_Ramn
+        self.htb.wcc, self.htb.wccf = self.wcc, self.wccf
+        if np.nonzero(htb.R[htb.nR//2])[0].size != 0: raise WanpyError('R[nR//2] is not [0 0 0].')
+        for i in range(3):
+            self.htb.r_Ramn[self.htb.nR//2, i] *= 1 - np.eye(self.htb.nw)
+            self.htb.r_Ramn[self.htb.nR//2, i] += np.diag(self.wcc.T[i])
+
+    def get_rep_TR(self, symmop, rep_pos):
+        """
+          Note (need proofread):
+
+          In matrix form, the real space transformation can be expressed as
+
+              H_{m'n'}(R') = P^{latt}_{mn}(R',R) P^{orbi}_{m'm} P^{orbi}_{n'n} H_{mn}(R)
+
+          where we have assumed the real atomic basis. Here, P^{orbi}_{n'n} is the same
+          corepresentation matrix as in reciprocal space case,
+          P^{latt}_{mn}(R',R) = 1 if under transformation Q={g|v}T
+
+              Q: <tau_{m}|R+tau_{n}> -> <Q(tau_{m})|Q(R+tau_{n})> =  <tau_{Q_m}|R'+tau_{Q_n}>
+
+          with tau_{Q_n} = Q tau_n mode Rj. Therefore, for each pair of (m,n) P^{latt}_{mn}(R',R)
+          is determined by
+
+              g(R + tau_n - tau_m) = R' + tau_{Q_n} - tau_{Q_m},
+
+          or alternatively,
+
+              g(R + tau_{Q_n} - tau_{Q_m}) = R' + tau_n - tau_m.
+
+        """
+        npos, nR = self.npos, self.nR
+        nw_spinless = self.list_nw_at_pos.sum()
+
+        pos_car_rot = np.einsum('ij,ja->ia', rep_pos, self.pos_car, optimize=True)
+        Rcij_rot = np.einsum('ijRa->Rija', np.full((npos, npos, nR, 3), self.Rc)) + \
+                   np.einsum('Rija->Rija', np.full((nR, npos, npos, 3), pos_car_rot)) - \
+                   np.einsum('Rjia->Rija', np.full((nR, npos, npos, 3), pos_car_rot))
+        rot_car = get_op_cartesian(symmop)
+        Rcij_rot = np.einsum('ab,Rijb->Rija', rot_car, Rcij_rot, optimize=True)
+
+        rep_TRij = np.zeros([nR, nR, npos, npos])
+        rep_TRmn = np.zeros([nR, nR, nw_spinless, nw_spinless])
+
+        if self.iprint >= 2: print('\t', 'cal rep_TRij ')
+        for ii in range(npos):
+            for jj in range(npos):
+                dismat = distance_matrix(Rcij_rot[:, ii, jj, :], self.Rcij[:, ii, jj, :])  # 1179 ms
+                rep_TRij[:, :, ii, jj] = np.array(dismat < 0.1, dtype='float64')
+
+        if self.iprint >= 2: print('\t', 'cal rep_TRmn ')
+        index_i = 0
+        for ii in range(npos):
+            if self.iprint >= 2: print('\t', 'cal rep_TRmn at position {}/{} '.format(ii+1, npos))
+            index_j = 0
+            num_i = self.list_nw_at_pos[ii]
+            for jj in range(npos):
+                num_j = self.list_nw_at_pos[jj]
+                rep_TRmn[:, :, index_i:index_i + num_i, index_j:index_j + num_j] = \
+                    np.repeat(rep_TRij[:, :, ii, jj], num_i * num_j, axis=1).reshape([nR, nR, num_i, num_j])
+                # np.einsum('mnRT->RTmn', np.kron(rep_TRij[:, :, ii, jj], np.ones([num_i, num_j, 1, 1])))
+                index_j += self.list_nw_at_pos[jj]
+            index_i += self.list_nw_at_pos[ii]
+
+        if self.soc:
+            rep_TRmn = np.kron(np.ones([1, 1, 2, 2]), rep_TRmn)
+        return rep_TRij, rep_TRmn
+
+    def extend_couting_Rij(self, couting_Rij):
+        # extend couting_Rij to couting_Rmn with shape (nR, nw, nw)
+
+        couting_Rmn = np.zeros([self.nR, self.nw_spinless, self.nw_spinless], dtype='float64')
+        index_i = 0
+        for ii in range(self.npos):
+            index_j = 0
+            num_i = self.list_nw_at_pos[ii]
+            for jj in range(self.npos):
+                num_n = self.list_nw_at_pos[jj]
+                couting_Rmn[:, index_i:index_i + num_i, index_j:index_j + num_n] = \
+                    np.einsum('mnR->Rmn', np.kron(couting_Rij[:, ii, jj], np.ones([num_i, num_n, 1])))
+                index_j += self.list_nw_at_pos[jj]
+            index_i += self.list_nw_at_pos[ii]
+        if self.soc:
+            couting_Rmn = np.kron(np.ones([1, 2, 2]), couting_Rmn)
+        return couting_Rmn
+
+    '''
+      * update wannier center
+    '''
+    def get_atomic_wcc(self):
+        _wccf = []
+        for i in range(self.ntype_atoms):
+            ion = self.atoms_pos[i]
+            nw_ion_i = np.sum(2 * np.array(self.atoms_orbi[i]) + 1)
+            _wccf.append(np.kron(ion, np.ones([nw_ion_i, 1])))
+        wccf = np.vstack(_wccf)
+        if self.soc:
+            wccf = np.kron(np.ones([2, 1]), wccf)
+        wcc = (self.latt @ wccf.T).T
+        return wcc, wccf
+
+class Symmetrize_Htb_kspace(object):
     """
       * Note
       1. Only support htb generated by v1.2 version VASP2WANNIER interface
@@ -70,7 +242,7 @@ class Symmetrize_Htb(object):
       4. The Symmetrize_Htb does not depend on htb.worbi
     """
 
-    def __init__(self, ngridR, htb, symmops, atoms_pos, atoms_orbi, soc):
+    def __init__(self, ngridR, htb, symmops, atoms_pos, atoms_orbi, soc, iprint=2):
         self.htb = htb
         self.symmops = symmops
         self.atoms_pos = atoms_pos
@@ -94,6 +266,8 @@ class Symmetrize_Htb(object):
         # self.eikR = np.exp(2j * np.pi * np.einsum('ka,Ra->kR', self.meshk, self.gridR, optimize=True))
         # self.eiktau = np.exp(2j * np.pi * np.einsum('ka,ja->kj', self.meshk, wccf))
 
+        self.iprint = iprint
+
     def run(self, tmin=1e-6):
         check_valid_symmops(self.symmops)
         htb = self.htb
@@ -102,49 +276,25 @@ class Symmetrize_Htb(object):
         # write symmops info into htb
         htb.symmops = symmops
 
-        # get h and r in meshk from original htb
-        # print('[Symmetrize_Htb] calculating h and r in meshk from original htb ...')
-        # hk_kmn = self.get_hk_kmn_from_htb(self.htb, tbgauge=True)
-        # r_kamn = self.get_rk_from_htb(self.htb, tbgauge=True)
-
-
-        # symmetry hr_kmn and r_kamn
-        # print('[Symmetrize_Htb] symmetrizing hr_kmn and r_kamn ...')
-        # wcc, wccf = self.get_atomic_wcc()
-
-        # eiktau = np.exp(2j * np.pi * np.einsum('ka,ja->kj', self.meshk, wccf))
-
-        # hk_kmn_symm = np.zeros_like(hk_kmn)
-        # r_kamn_symm = np.zeros_like(r_kamn)
-        # for i in range(self.nsymmops):
-        #     invgk = self.get_index_invgk(symmops[i])
-        #     corep_tb = self.get_corep(symmops[i], atoms_pos, atoms_orbi, soc)
-        #     if int(symmops[i, 0]) == 1:
-        #         # convert corep to lattice gauge
-        #         # corep_latt = np.einsum('ki,ij,kj->kij', eiktau, corep_tb, eiktau.conj(), optimize=True)
-        #         hk_kmn_symm += np.einsum('mi,kij,jn->kmn', corep_tb, hk_kmn[invgk], corep_tb.T.conj(), optimize=True)
-        #         r_kamn_symm += np.einsum('mi,kaij,jn->kamn', corep_tb, r_kamn[invgk], corep_tb.T.conj(), optimize=True)
-        #         # hk_kmn_symm += np.einsum('kmi,kij,knj->kmn', corep_latt, hk_kmn[invgk], corep_latt.conj(), optimize=True)
-        #         # r_kamn_symm += np.einsum('kmi,kaij,knj->kamn', corep_latt, r_kamn[invgk], corep_latt.conj(), optimize=True)
-        #     elif int(symmops[i, 0]) == -1:
-        #         # convert corep to lattice gauge
-        #         # corep_latt = np.einsum('ki,ij,kj->kij', eiktau, corep_tb, eiktau, optimize=True)
-        #         hk_kmn_symm += np.einsum('mi,kij,jn->kmn', corep_tb, np.conj(hk_kmn[invgk]), corep_tb.T.conj(), optimize=True)
-        #         r_kamn_symm += np.einsum('mi,kaij,jn->kamn', corep_tb, np.conj(r_kamn[invgk]), corep_tb.T.conj(), optimize=True)
-        #         # hk_kmn_symm += np.einsum('kmi,kij,knj->kmn', corep_latt, np.conj(hk_kmn[invgk]), corep_latt.conj(), optimize=True)
-        #         # r_kamn_symm += np.einsum('kmi,kaij,knj->kamn', corep_latt, np.conj(r_kamn[invgk]), corep_latt.conj(), optimize=True)
-
         hk_kmn_symm = np.zeros([self.nk, htb.nw, htb.nw], dtype='complex128')
         r_kamn_symm = np.zeros([self.nk, 3, htb.nw, htb.nw], dtype='complex128')
         for i in range(self.nsymmops):
-            print('[Symmetrize_Htb] symmetrizing hr_kmn and r_kamn {}/{}'.format(i+1, self.nsymmops))
+            print('Symmetrizing hr_kmn and r_kamn in reciprocal space {}/{}'.format(i+1, self.nsymmops))
+
+            if self.iprint >= 2: print('\t', 'rot meshk')
             TR = symmops[i][0]
             invg = LA.inv(get_op_cartesian(symmops[i]))
             meshkc_invg = (invg @ self.meshkc.T).T * (-1)**TR
             meshk_invg = (LA.inv(self.lattG) @ meshkc_invg.T).T
+
+            if self.iprint >= 2: print('\t', 'cal corep')
             corep = self.get_corep(symmops[i])
+
+            if self.iprint >= 2: print('\t', 'cal hk_kmn and r_kamn on roted meshk')
             hk_kmn = self.ft_gridR_to_meshk(htb.hr_Rmn, meshk_invg, htb.R, htb.ndegen, tbgauge=True)
             r_kamn = self.ft_gridR_to_meshk(htb.r_Ramn, meshk_invg, htb.R, htb.ndegen, tbgauge=True)
+
+            if self.iprint >= 2: print('\t', 'rot hk_kmn and r_kamn')
             if int(TR) == 0:
                 hk_kmn_symm += np.einsum('mi,kij,jn->kmn', corep, hk_kmn, corep.T.conj(), optimize=True)
                 r_kamn_symm += np.einsum('mi,kaij,jn->kamn', corep, r_kamn, corep.T.conj(), optimize=True)
@@ -152,24 +302,18 @@ class Symmetrize_Htb(object):
                 hk_kmn_symm += np.einsum('mi,kij,jn->kmn', corep, np.conj(hk_kmn), corep.T.conj(), optimize=True)
                 r_kamn_symm += np.einsum('mi,kaij,jn->kamn', corep, np.conj(r_kamn), corep.T.conj(), optimize=True)
 
+            if self.iprint >= 2: print()
+
         hk_kmn_symm /= self.nsymmops
         r_kamn_symm /= self.nsymmops
 
         # get h and r in gridR from symmetrize hr_kmn and r_kamn
-        # self.htb.hr_Rmn = self.ft_meshk_to_gridR(hk_kmn_symm, self.meshk, self.gridR, self.ndegen, tbgauge=True)
-        # self.htb.r_Ramn = self.ft_meshk_to_gridR(r_kamn_symm, self.meshk, self.gridR, self.ndegen, tbgauge=True)
-        # self.htb.nR = self.nR
-        # self.htb.ndegen = self.ndegen
-        # self.htb.R = self.gridR
-        # self.htb.Rc = (self.latt @ self.gridR.T).T
-
-        # get h and r in gridR from symmetrize hr_kmn and r_kamn
-        print('[Symmetrize_Htb] get h and r in gridR from symmetrize hr_kmn and r_kamn ...')
+        print('cal hr_Rmn and r_Ramn in new gridR (larger one) from symmetrize hr_kmn and r_kamn ...')
         hr_Rmn_symmtric = self.ft_meshk_to_gridR(hk_kmn_symm, self.meshk, self.gridR, self.ndegen, tbgauge=True)
         r_Ramn_symmtric = self.ft_meshk_to_gridR(r_kamn_symm, self.meshk, self.gridR, self.ndegen, tbgauge=True)
 
         # update nR, ndegen, R, Rc, hr_Rmn, r_Ramn
-        print('[Symmetrize_Htb] updating htb object ...')
+        print('updating htb object ...')
         nonzero_indicator_hr = np.array([1 if np.abs(hr_Rmn_symmtric[i]).max() > tmin else 0 for i in range(self.nR)])
         nonzero_indicator_r = np.array([1 if np.abs(r_Ramn_symmtric[i]).max() > tmin else 0 for i in range(self.nR)])
         nonzero = np.where((nonzero_indicator_hr + nonzero_indicator_r) > 0)[0]
@@ -210,65 +354,6 @@ class Symmetrize_Htb(object):
         return Rmn
 
     '''
-      * F.T.: from R-space to k-space
-        hr_Rmn = <0m|H|Rn>
-        hk_kmn = <mk|H|nk>
-        r_Ramn = <0m|r|Rn>
-        r_kamn = <mk|r|nk>
-    '''
-    # def get_hk_kmn(self, hr_Rmn, meshk, gridR, ndegen, tbgauge):
-    #     eikR = np.exp(2j * np.pi * np.einsum('R,ka,Ra->kR', 1/ndegen, meshk, gridR, optimize=True))
-    #     if tbgauge:
-    #         eiktau = np.exp(2j * np.pi * np.einsum('ka,ja->kj', meshk, self.wccf))
-    #         hk_kmn = np.einsum('kR,km,Rmn,kn->kmn', eikR, eiktau.conj(), hr_Rmn, eiktau, optimize=True)
-    #     else:
-    #         hk_kmn = np.einsum('kR,Rmn->kmn', eikR, hr_Rmn, optimize=True)
-    #     return hk_kmn
-    #
-    # def get_r_kamn(self, r_Ramn, meshk, gridR, ndegen, tbgauge):
-    #     eikR = np.exp(2j * np.pi * np.einsum('R,ka,Ra->kR', 1/ndegen, meshk, gridR, optimize=True))
-    #     if tbgauge:
-    #         r_kamn = np.einsum('kR,km,Ramn,kn->kamn', self.eiktau.conj(), self.eikR, r_Ramn, self.eiktau, optimize=True)
-    #     else:
-    #         r_kamn = np.einsum('kR,Ramn->kamn', eikR, r_Ramn, optimize=True)
-    #     return r_kamn
-    #
-    # def get_hk_kmn_from_htb(self, htb, meshk, tbgauge):
-    #     eikR = np.exp(2j * np.pi * np.einsum('ka,Ra->kR', meshk, htb.R, optimize=True))
-    #     if tbgauge:
-    #         eiktau = np.exp(2j * np.pi * np.einsum('ka,ja->kj', meshk, self.wccf))
-    #         hk_kmn = np.einsum('R,kR,km,Rmn,kn->kmn', 1/htb.ndegen, eikR, self.eiktau.conj(), htb.hr_Rmn, self.eiktau, optimize=True)
-    #     else:
-    #         hk_kmn = np.einsum('R,kR,Rmn->kmn', 1/htb.ndegen, eikR, htb.hr_Rmn, optimize=True)
-    #     return hk_kmn
-    '''
-      * F.T.: from k-space to R-space
-    '''
-    # def get_hr_Rmn(self, hk_kmn, meshk, gridR, ndegen, tbgauge):
-    #     eikR = np.exp(2j * np.pi * np.einsum('R,ka,Ra->kR', 1/ndegen, meshk, gridR, optimize=True))
-    #     if tbgauge:
-    #         hr_Rmn = np.einsum('kR,km,kmn,kn->Rmn', self.eikR.conj(), self.eiktau, hk_kmn, self.eiktau.conj(), optimize=True) / self.nk
-    #     else:
-    #         hr_Rmn = np.einsum('kR,kmn->Rmn', self.eikR.conj(), hk_kmn, optimize=True) / self.nk
-    #     return hr_Rmn
-    #
-    # def get_r_Ramn(self, r_kamn, meshk, gridR, ndegen, tbgauge):
-    #     eikR = np.exp(2j * np.pi * np.einsum('R,ka,Ra->kR', 1/ndegen, meshk, gridR, optimize=True))
-    #     if tbgauge:
-    #         r_Ramn = np.einsum('kR,km,kamn,kn->Ramn', self.eikR.conj(), self.eiktau, r_kamn, self.eiktau.conj(), optimize=True) / self.nk
-    #     else:
-    #         r_Ramn = np.einsum('kR,kamn->Ramn', self.eikR.conj(), r_kamn, optimize=True) / self.nk
-    #     return r_Ramn
-    #
-    # def get_rk_from_htb(self, htb, tbgauge):
-    #     eikR = np.exp(2j * np.pi * np.einsum('ka,Ra->kR', self.meshk, htb.R, optimize=True))
-    #     if tbgauge:
-    #         rk = np.einsum('R,kR,km,Ramn,kn->kamn', 1/htb.ndegen, eikR, self.eiktau.conj(), htb.r_Ramn, self.eiktau, optimize=True)
-    #     else:
-    #         rk = np.einsum('R,kR,Ramn->kamn', 1/htb.ndegen, eikR, htb.r_Ramn, optimize=True)
-    #     return rk
-
-    '''
       * update wannier center
     '''
     def get_atomic_wcc(self):
@@ -284,29 +369,16 @@ class Symmetrize_Htb(object):
         return wcc, wccf
 
     '''
-      * rotate the k-mesh
-    '''
-    # def get_index_invgk(self, symmop):
-    #     TR = symmop[0]
-    #     invg = LA.inv(get_op_cartesian(symmop))
-    #     meshkc_rot = (invg @ self.meshkc.T).T * (-1)**TR
-    #     meshk_rot = (LA.inv(self.lattG) @ meshkc_rot.T).T
-    #     meshk_rot = np.remainder(meshk_rot + 1e-10, 1.0)
-    #     meshkc_rot = (self.lattG @ meshk_rot.T).T
-    #
-    #     dismat = distance_matrix(meshkc_rot, self.meshkc)
-    #     index_gk = np.argmin(dismat, 1)
-    #     # self.meshkc[index] - meshkc_rot
-    #     x, y = np.where(dismat < 1e-5)
-    #     if x.size != self.nk:
-    #         raise WanpyError('error in find index_gk')
-    #     return index_gk
-
-    '''
       * corep of magnetic space group
     '''
+    # def get_corep(self, symmop):
+    #     corep, rep_pos = get_corep(symmop, self.latt, self.atoms_pos, self.atoms_orbi, self.soc)
+    #     return corep
+
     def get_corep(self, symmop):
         """
+          The same with wanpy.core.symmetry.get_corep, I will remove this function later.
+
           Get corep of magnetic space group operation.
           Note the k-independent corep is only applicable for tb-gauge case. For the lattice-gauge case, the corep
           depends on k.
@@ -378,6 +450,73 @@ def get_rep_spin(symmop):
     if TR == 1: D = D @ (-1j * sigmay)
     D[np.abs(D)<1e-10] = 0
     return D
+
+def get_corep(symmop, latt, atoms_pos, atoms_orbi, soc):
+    """
+      Get corep of magnetic space group operation.
+      Note the k-independent corep is only applicable for tb-gauge case. For the lattice-gauge case, the corep
+      depends on k.
+
+      For the unitary operator:
+        D_k^{latt}(g) = S(k).D^{tb}(g).S(k)*,   (1)
+      where S(k) = e^(ik\tau), and \tau is the coordinates of orbital center.
+      On the other hand, for the anti-unitary operator, we have:
+        D_k^{latt}(g) = S(k).D^{tb}(g).S(k).    (2)
+
+      Regulation of the basis order:
+       - spin index
+         - atomic positions
+           - atomic orbitals
+             ...
+           ...
+         ...
+      for example in monolayer graphene with s and p orbitals at each C atoms and with SOC, the basis is
+          |u,C1,s> |u,C1,pz> |u,C1,px> |u,C1,py>
+          |u,C2,s> |u,C2,pz> |u,C2,px> |u,C2,py>
+          |d,C1,s> |d,C1,pz> |d,C1,px> |d,C1,py>
+          |d,C2,s> |d,C2,pz> |d,C2,px> |d,C2,py>
+    """
+
+    # atoms_pos, atoms_orbi, soc = self.atoms_pos, self.atoms_orbi, self.soc
+    ntype_atoms = len(atoms_pos)
+    TR, det, alpha, nx, ny, nz, taux, tauy, tauz = symmop
+    tau = np.array([taux, tauy, tauz])
+    tau_car = latt @ tau
+
+    _corep = []
+    _rep_pos = []
+    for i in range(ntype_atoms):
+        ion = atoms_pos[i]
+        orbi_l = atoms_orbi[i]
+
+        # get op_orbi
+        _rep_orbi_i = [get_rep_atomic(symmop, l) for l in orbi_l]
+        rep_orbi_i = block_diag(*_rep_orbi_i)
+
+        # get op_pos
+        rot = get_op_cartesian(symmop)
+
+        ion_car = (latt @ ion.T).T
+        ion_car_rot = (rot @ ion_car.T).T + tau_car
+
+        ion_rot = (LA.inv(latt) @ ion_car_rot.T).T
+        ion_rot = np.remainder(ion_rot + 1e-5, 1.0)  # move ion at 1- to 0+
+        ion_car_rot = (latt @ ion_rot.T).T
+
+        dismat = distance_matrix(ion_car, ion_car_rot)
+        rep_pos_i = np.array(dismat < 0.01, dtype='float')
+
+        assert LA.matrix_rank(rep_pos_i) == ion.shape[0]  # check if a valid symmop
+
+        # get op
+        _corep.append(np.kron(rep_pos_i, rep_orbi_i))
+        _rep_pos.append(rep_pos_i)
+    corep = block_diag(*_corep)
+    rep_pos = block_diag(*_rep_pos)
+    if soc:
+        rep_spin = get_rep_spin(symmop)
+        corep = np.kron(rep_spin, corep)
+    return corep, rep_pos
 
 def get_rep_atomic(symmop, l):
     """
@@ -519,9 +658,16 @@ def get_proj_info(htb):
 #     return ngridR, symmops
 
 def parse_symmetry_inputfile(fname='symmetry.in'):
-    symmops = []
-    magmoms = []
+
+    # set default values
+    symmetric_method = 'kspace'
+    parse_symmetry = 'man'
+    ngridR = None
     symprec = 1e-5
+    magmoms = []
+    symmops = []
+
+    # update values from file
     with open(fname, 'r') as f:
         while True:
             _pos = f.tell()
@@ -529,11 +675,14 @@ def parse_symmetry_inputfile(fname='symmetry.in'):
 
             if _pos == f.tell(): break
 
-            if 'ngridR' in inline:
-                ngridR = [int(i) for i in inline.split('=')[1].split()]
+            if 'symmetric_method' in inline:
+                symmetric_method = str(inline.split('=')[1].split()[0]).lower()
 
             if 'parse_symmetry' in inline:
-                parse_symmetry = str(inline.split('=')[1].split()[0])
+                parse_symmetry = str(inline.split('=')[1].split()[0]).lower()
+
+            if 'ngridR' in inline:
+                ngridR = [int(i) for i in inline.split('=')[1].split()]
 
             if 'symprec' in inline:
                 symprec = float(inline.split('=')[1].split()[0])
@@ -561,8 +710,9 @@ def parse_symmetry_inputfile(fname='symmetry.in'):
     check_valid_symmops(symmops)
 
     adict = {
-        'ngridR': ngridR,
+        'symmetric_method': symmetric_method,
         'parse_symmetry': parse_symmetry,
+        'ngridR': ngridR,
         'symprec': symprec,
         'magmoms': magmoms,
         'symmops': symmops,
@@ -572,126 +722,4 @@ def parse_symmetry_inputfile(fname='symmetry.in'):
     return win
 
 if __name__ == "__main__":
-    import os
-    # from wanpy.core.plot import *
-    # import matplotlib.pyplot as plt
-    from wanpy.env import ROOT_WDIR
-    from wanpy.core.structure import Htb
-
-    wdir = os.path.join(ROOT_WDIR, r'symmtric_htb')
-    input_dir = os.path.join(ROOT_WDIR, r'symmtric_htb/htblib')
-
-    # htb_fname = r'htb.MnPd.afm100.h5'
-    # htb_fname = r'htb.MnPt.afm100.h5'
-    htb_fname = r'htb.vs2vs.afmy.h5'
-
-    os.chdir(input_dir)
-    htb = Htb()
-    htb.load_h5(htb_fname)
-    os.chdir(wdir)
-
-    # soc = True
-    # ngridR = np.array([14, 14, 14])
-    # symmops = np.array([
-    #     # TR, det, alpha, nx, ny, nz, taux, tauy, tauz
-    #     [0, 1, 0, 0, 0, 1, 0, 0, 0], # e
-    #     [0, 1, np.pi, 1, 0, 0, 0, 0, 0], # c2x
-    #     [0, 1, np.pi, 0, 1, 0, 0.5, 0.5, 0], # c2y
-    #     [0, 1, np.pi, 0, 0, 1, 0.5, 0.5, 0], # c2z
-    #     [0, -1, 0, 0, 0, 1, 0, 0, 0], # P
-    #     [0, -1, np.pi, 1, 0, 0, 0, 0, 0], # mx
-    #     [0, -1, np.pi, 0, 1, 0, 0.5, 0.5, 0], # my
-    #     [0, -1, np.pi, 0, 0, 1, 0.5, 0.5, 0], # mz
-    #     # anti unitary
-    #     [1, 1, 0, 0, 0, 1, 0.5, 0.5, 0], # T
-    #     [1, 1, np.pi, 1, 0, 0, 0.5, 0.5, 0], # c2xT
-    #     [1, 1, np.pi, 0, 1, 0, 0, 0, 0], # c2yT
-    #     [1, 1, np.pi, 0, 0, 1, 0, 0, 0], # c2zT
-    #     [1, -1, 0, 0, 0, 1, 0.5, 0.5, 0], # PT
-    #     [1, -1, np.pi, 1, 0, 0, 0.5, 0.5, 0], # mxT
-    #     [1, -1, np.pi, 0, 1, 0, 0, 0, 0], # myT
-    #     [1, -1, np.pi, 0, 0, 1, 0, 0, 0], # mzT
-    # ])
-    # # symmops = np.array([
-    # #     # TR, det, alpha, nx, ny, nz, taux, tauy, tauz
-    # #     [0, 1, 0, 0, 0, 1, 0, 0, 0], # e
-    # #     [1, -1, 0, 0, 0, 1, 0.5, 0.5, 0], # PT
-    # # ])
-    # # atoms_pos = [
-    # #     np.array([
-    # #         [0, 0, 0],
-    # #         [0.5, 0.5, 0],
-    # #     ]),
-    # #     np.array([
-    # #         [0.5, 0, 0.5],
-    # #         [0, 0.5, 0.5],
-    # #     ])
-    # # ]
-    # # atoms_orbi = [
-    # #     [0, 2],
-    # #     [0, 1, 2]
-    # # ]
-    # atoms_pos, atoms_orbi = get_proj_info(htb)
-    # symmhtb = Symmetrize_Htb(ngridR, htb, symmops, atoms_pos, atoms_orbi, soc)
-    # symmhtb.run()
-    # # htb.r_Ramn = None
-    # # htb.save_htb(r'htb.MnPd.afm100.symmpt.e6.h5', decimals=12)
-    # htb.save_htb(r'htb.MnPt.afm100.symm.h5')
-
-    ''' VS2VS '''
-    soc = True
-    ngridR = np.array([6, 16, 6])
-    symmops = np.array([
-        # TR, det, alpha, nx, ny, nz, taux, tauy, tauz
-        [0, 1, 0, 0, 0, 1, 0, 0, 0], # e
-        [0, -1, 0, 0, 0, 1, 0, 0, 0], # P
-        [0, -1, np.pi, 0, 1, 0, 0, 0, 0], # My
-        [0, 1, np.pi, 0, 1, 0, 0, 0, 0], # C2y
-        # anti unitary
-        [1, 1, 0, 0, 0, 1, 0.5, 0.5, 0], # ~T
-        [1, -1, 0, 0, 0, 1, 0.5, 0.5, 0], # ~TP
-        [1, -1, np.pi, 0, 1, 0, 0.5, 0.5, 0], # ~TMy
-        [1, 1, np.pi, 0, 1, 0, 0.5, 0.5, 0], # ~TC2y
-    ])
-    atoms_pos = [
-        np.array([
-            [0.1552357247222010, 0.0000000000000000, 0.0059324618969288],
-            [0.0861959795410315, 0.0000000000000000, 0.3088876646940996],
-            [0.0705769787938255, 0.5000000000000000, 0.6792078946571625],
-            [0.9294230212061745, 0.5000000000000000, 0.3207921053428374],
-            [0.9138040204589686, 0.0000000000000000, 0.6911123353059004],
-            [0.8447642752777991, 0.0000000000000000, 0.9940675381030712],
-            [0.7390035718037002, 0.5000000000000000, 0.6598011335297749],
-            [0.7609964274058485, 0.0000000000000000, 0.3401988631552862],
-            [0.6552357206563747, 0.5000000000000000, 0.0059324567625196],
-            [0.5861959779801355, 0.5000000000000000, 0.3088876630709361],
-            [0.5705769793101882, 0.0000000000000000, 0.6792078957778224],
-            [0.4294230206898117, 0.0000000000000000, 0.3207921042221775],
-            [0.4138040220198645, 0.5000000000000000, 0.6911123369290638],
-            [0.3447642793436252, 0.5000000000000000, 0.9940675432374804],
-            [0.2390035725941515, 0.0000000000000000, 0.6598011368447139],
-            [0.2609964281963000, 0.5000000000000000, 0.3401988664702250],
-        ]),
-        np.array([
-            [0.7044177935899905, 0.0000000000000000, 0.8534962109885530],
-            [0.1511460161078381, 0.5000000000000000, 0.4847941460770144],
-            [0.0000000000000000, 0.0000000000000000, 0.5000000000000000],
-            [0.8488539838921618, 0.5000000000000000, 0.5152058539229856],
-            [0.7955822078552005, 0.5000000000000000, 0.1465037814517498],
-            [0.2044177921447997, 0.5000000000000000, 0.8534962185482500],
-            [0.6511460157838294, 0.0000000000000000, 0.4847941387978736],
-            [0.5000000000000000, 0.5000000000000000, 0.5000000000000000],
-            [0.3488539842161779, 0.0000000000000000, 0.5152058612021265],
-            [0.2955822064100094, 0.0000000000000000, 0.1465037890114469],
-        ])
-    ]
-    atoms_orbi = [
-        [1],
-        [2]
-    ]
-    # atoms_pos, atoms_orbi = get_proj_info(htb)
-    symmhtb = Symmetrize_Htb(ngridR, htb, symmops, atoms_pos, atoms_orbi, soc)
-    symmhtb.run()
-    # htb.r_Ramn = None
-    # htb.save_htb(r'htb.vs2vs.afmy.symm.h5')
-    # htb.save_wannier90_hr_dat(fmt='18.12')
+    pass

@@ -15,7 +15,7 @@ import os
 import errno
 import numpy as np
 from wanpy.core.structure import Htb, Cell, Worbi
-from wanpy.core.symmetry import Symmetrize_Htb, get_proj_info
+from wanpy.core.symmetry import Symmetrize_Htb_kspace, Symmetrize_Htb_rspace, get_proj_info
 from wanpy.core.utils import wannier90_load_wcc
 from wanpy.core.units import *
 from wanpy.interface.wannier90 import *
@@ -54,11 +54,10 @@ class WannierInterpolation(object):
     """
 
     def __init__(self, fermi=0., poscar_fname='POSCAR', seedname='wannier90',
-                 symmetric_htb=False, ngridR_symmhtb=None, symmops=None,
-                 check_if_uudd_amn=True, verbose=False):
+                 symmetric_htb=False, symmetric_method='kspace', ngridR_symmhtb=None, symmops=None,
+                 check_if_uudd_amn=True):
         self.poscar_fname = poscar_fname
         self.seedname = seedname
-        self.verbose = verbose
 
         self.fermi = fermi
 
@@ -95,7 +94,7 @@ class WannierInterpolation(object):
 
         # .chk
         w90_chk = W90_chk()
-        w90_chk.load_from_w90(seedname, verbose=verbose)
+        w90_chk.load_from_w90(seedname, verbose=False)
         self.w90_chk = w90_chk
 
         self.nk = w90_chk.nk
@@ -131,7 +130,8 @@ class WannierInterpolation(object):
             self.eig_win[ik, :w90_chk.ndimwin[ik]] = self.eig[ik, _index]
 
         # symmetry
-        self.symmetric_htb, self.ngridR_symmhtb, self.symmops = symmetric_htb, ngridR_symmhtb, symmops
+        self.symmetric_htb, self.symmetric_method, self.ngridR_symmhtb, self.symmops = \
+            symmetric_htb, symmetric_method, ngridR_symmhtb, symmops
 
         print('calculating F.T. matrix')
         self.eikR = np.exp(-2j * np.pi * np.einsum('ka,Ra->kR', self.meshkf, self.gridR))
@@ -143,7 +143,7 @@ class WannierInterpolation(object):
         self.htb = Htb(fermi)
 
     def run(self, cal_r=False, cal_spin=False, write_h5=True, write_dat=False,
-            write_spn=False, hermite_r=True,
+            write_spn=False, hermite_r=True, iprint=2,
             h5decimals=16, fmt='12.6'):
         # write_h5: if write htb.h5
         # write_dat: if write .dat files
@@ -174,17 +174,31 @@ class WannierInterpolation(object):
                       )
 
         if self.symmetric_htb:
-            print('symmetrizing wannier tb')
+            print('symmetrizing Wannier TB model')
             atoms_pos, atoms_orbi = get_proj_info(htb=self.htb)
-            symmhtb = Symmetrize_Htb(ngridR=self.ngridR_symmhtb,
-                                     htb=self.htb,
-                                     symmops=self.symmops,
-                                     atoms_pos=atoms_pos,
-                                     atoms_orbi=atoms_orbi,
-                                     soc=self.htb.worbi.soc
-                                     )
-            symmhtb.run()
-            self.htb = symmhtb.htb
+
+            if self.symmetric_method[0] == 'k':
+                symmhtb = Symmetrize_Htb_kspace(ngridR=self.ngridR_symmhtb,
+                                                htb=self.htb,
+                                                symmops=self.symmops,
+                                                atoms_pos=atoms_pos,
+                                                atoms_orbi=atoms_orbi,
+                                                soc=self.htb.worbi.soc,
+                                                iprint=iprint,
+                                                )
+                symmhtb.run(tmin=1e-6)
+                self.htb = symmhtb.htb
+            elif self.symmetric_method[0] == 'r':
+                symmhtb = Symmetrize_Htb_rspace(htb=self.htb,
+                                                symmops=self.symmops,
+                                                atoms_pos=atoms_pos,
+                                                atoms_orbi=atoms_orbi,
+                                                soc=self.htb.worbi.soc,
+                                                iprint=iprint,
+                                                )
+                symmhtb.run()
+                self.htb = symmhtb.htb
+                pass
 
         if write_dat:
             print('write hr matrix')
@@ -249,7 +263,7 @@ class WannierInterpolation(object):
         return spin0_Rmn, spin_Ramn
 
     # @staticmethod
-    def cal_vasp_spin_matrix(self):
+    def cal_vasp_spin_matrix(self, verbose=False):
         from wanpy.interface.vasp import VASP_wavecar
         print('reading WAVECAR')
         wavecar = VASP_wavecar('WAVECAR', verbose=False, vasp_type='ncl')
@@ -261,7 +275,7 @@ class WannierInterpolation(object):
         spink = np.zeros([3, nk, nb, nb], dtype='complex128')
         print('calculating spin matrix in basis of pseudo wavefunctions (vasp)')
         for ik in range(nk):
-            if self.verbose: print('cal spin matrix on {}/{}'.format(ik+1, nk))
+            if verbose: print('cal spin matrix on {}/{}'.format(ik+1, nk))
             wf = np.array(wfs[ik], dtype='complex128')
             norm = np.einsum('nsG->n', np.abs(wf)**2)
             wf = np.einsum('n,nsG->nsG', norm, wf)
@@ -307,26 +321,27 @@ def check_htb_equ(htb1, htb2):
 
 
 if __name__ == "__main__":
+    pass
     # import matplotlib.pyplot as plt
     # from wanpy.core.plot import *
     # from wanpy.response.response_plot import *
-    from wanpy.env import ROOT_WDIR
-    wdir = os.path.join(ROOT_WDIR, r'wanpy_debug/buildwannier/MnPd')
-    input_dir = os.path.join(ROOT_WDIR, r'wanpy_debug/buildwannier/MnPd')
-    os.chdir(wdir)
-
-    htb1 = Htb()
-    # htb1.load_wannier90_dat()
-    htb1.load_h5('htb.h5')
-
-    # htb3 = Htb()
+    # from wanpy.env import ROOT_WDIR
+    # wdir = os.path.join(ROOT_WDIR, r'wanpy_debug/buildwannier/MnPd')
+    # input_dir = os.path.join(ROOT_WDIR, r'wanpy_debug/buildwannier/MnPd')
+    # os.chdir(wdir)
+    # 
+    # htb1 = Htb()
     # # htb1.load_wannier90_dat()
-    # htb3.load_h5('htb.soc.mx.U3.wanpy.h5')
-
-    wanrun = WannierInterpolation(symmetric_htb=True)
-    # wanrun.run(cal_r=False, cal_spin=False, write_h5=False, write_spn=False)
-    wanrun.run(write_h5=False)
-    htb = wanrun.htb
+    # htb1.load_h5('htb.h5')
+    #
+    # # htb3 = Htb()
+    # # # htb1.load_wannier90_dat()
+    # # htb3.load_h5('htb.soc.mx.U3.wanpy.h5')
+    #
+    # wanrun = WannierInterpolation(symmetric_htb=True)
+    # # wanrun.run(cal_r=False, cal_spin=False, write_h5=False, write_spn=False)
+    # wanrun.run(write_h5=False)
+    # htb = wanrun.htb
 
     # htb2.save_h5('test.d9.h5', decimals=9)
 

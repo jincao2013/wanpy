@@ -16,7 +16,7 @@ WanPy requires the following packages to be installed:
 ## Installation
 1. To install WanPy, create a Conda environment with the required packages:
 ```bash
-$ conda create -n wanpy python=3.7 numpy scipy pandas sympy h5py mpi4py fortio spglib matplotlib
+$ conda create -n wanpy python numpy scipy pandas sympy h5py mpi4py fortio spglib matplotlib
 ````
 
 2. Uncompress wanpy package in personal computer or clusters: 
@@ -111,17 +111,24 @@ $ wanpy htb -h
 
 **Symmetric Wannier tight-binding models (SWTB)**
 
-Set symmetry operations that used to symmetrize the model in `symmetry.in`, a template file can also be produced by executing `wanpy wannier --temp`: 
+The SWTB can be obtained during collecting Wannier TB data. Set symmetry related parameters in `symmetry.in`, a template file can also be produced by executing `wanpy wannier --temp`: 
 
 ```bash
-ngridR = 12 12 1            # use a slightly larger value than the original TB model 
+# Input file for building symmetric Wannier TB model
+
+# Choose method, default is kspace
+symmetric_method = rspace   # Options: {rspace, kspace}
 
 # Choose between manually setting symmops or automatically detecting symmops from magmoms
 parse_symmetry = man        # Options: {man, auto}
 
+ngridR = 12 12 1            # used in kspace method, and use a slightly larger value than the original TB model 
+
 # Parameters used when parse_symmetry = auto
 symprec = 1e-5
 &magmoms
+0 0 1
+0 0 -1
 /
 
 # Parameters used when parse_symmetry = man
@@ -140,6 +147,10 @@ Then start to get SWTB with an additional tag `--symmetry`
 ```bash
 $ wanpy wannier --symmetry [options]
 ```
+
+
+
+See [Comput. Phys. Commun. 270, 108153 (2022)](https://www.sciencedirect.com/science/article/abs/pii/S0010465521002654) [(arXiv:2012.08871)](https://arxiv.org/abs/2105.09504) for detail. 
 
 
 

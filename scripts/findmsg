@@ -9,7 +9,7 @@ from scipy.spatial.transform import Rotation as scipy_rot
 from phonopy.interface.calculator import read_crystal_structure
 
 __date__ = "Sep. 22, 2023"
-__version__ = "0.1.5"
+__version__ = "0.1.6"
 
 def read_magmoms(filename, num_atoms):
     magmoms = np.zeros([num_atoms, 3], dtype='float64')
@@ -155,9 +155,11 @@ if __name__ == "__main__":
     parser.add_argument('poscar', type=str, help='Input POSCAR file (e.g., POSCAR)')
     parser.add_argument('-m', '--magmoms', type=str, help='Input magmoms file (e.g., magmoms)')
     parser.add_argument('-t', '--threshold', type=float, default=1e-5, help='Threshold value (default: 1e-5)')
+    parser.add_argument('-f', '--fracmag', action='store_true', dest='is_frac_magmoms', help='if the magmoms in fractional coordinates, default is in cartesian coordinates')
     args = parser.parse_args()
     fname_poscar, fname_magmoms = args.poscar, args.magmoms
     symprec = args.threshold
+    is_frac_magmoms = args.is_frac_magmoms
     print('- Symmetry search tolerance in the unit of length is: {:10.7f} Angstrom. '.format(symprec))
 
     unitcell, optional_structure_info = read_crystal_structure(fname_poscar)
@@ -174,6 +176,10 @@ if __name__ == "__main__":
 
     if fname_magmoms is not None:
         magmoms = read_magmoms(fname_magmoms, num_atoms)
+        # magmoms should be seted in cartesian coordinates,
+        # see https://spglib.readthedocs.io/en/latest/python-spglib.html#crystal-structure-cell
+        if is_frac_magmoms:
+            magmoms = (latt @ magmoms.T).T
         unitcell.set_magnetic_moments(magmoms)
         cell_mag = (
             unitcell.get_cell(),
@@ -182,6 +188,15 @@ if __name__ == "__main__":
             unitcell.get_atomic_numbers(),
             unitcell.get_magnetic_moments(),
         )
+        print(f'\nFound magnetic moments in "{fname_magmoms}" file:')
+        print('-'*65)
+        print('  cartesian coordinates            fractional coordinates   ')
+        print('-'*65)
+        for _magmoms_car in magmoms:
+            _magmoms_fra = LA.inv(latt) @ _magmoms_car
+            print('{:10.6f}{:10.6f}{:10.6f}   {:10.6f}{:10.6f}{:10.6f}'.format(_magmoms_car[0], _magmoms_car[1], _magmoms_car[2],
+                                                                               _magmoms_fra[0], _magmoms_fra[1], _magmoms_fra[2]))
+        print('-'*65)
 
     print('\n\nSpace group for non-magnetic structure (symprec:{:10.7f} Angstrom)'.format(symprec))
     print_spg(cell_nonmag, latt, symprec=symprec)
@@ -222,3 +237,5 @@ if __name__ == "__main__":
 #         )
 #
 #     primitive_cell = spglib.find_primitive(cell_mag, symprec=symprec)
+
+

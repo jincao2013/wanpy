@@ -11,23 +11,15 @@
 
 __date__ = "Nov. 5, 2019"
 
-import os
-import sys
-sys.path.append(os.environ.get('PYTHONPATH'))
 import numpy as np
-import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
-import matplotlib.path as mpath
-import matplotlib.patches as mpatches
-from matplotlib.pyplot import subplot
 
 __all__ = ['plot_matrix',
            'plot_matrix2',
            'plot_grid',
-           'plot_grid2',
+           'plot_color_on_grid',
            'plot_orbital',
            ]
-
 
 def plot_matrix(A, cmap='Reds'):
     # cmap = 'seismic'
@@ -45,50 +37,80 @@ def plot_matrix2(A, setnorm=False):
     plt.colorbar()
     plt.show()
 
-def plot_grid(grid, latt=None):
-    G = gridspec.GridSpec(1, 1)
+def plot_grid(grid, lattice=None, XX=None, YY=None):
+    import matplotlib.pyplot as plt
+    import matplotlib.path as mpath
+    import matplotlib.patches as mpatches
 
-    ax = subplot(G[0, 0])
-    plt.title('grid_K')
-    ax.scatter(grid[:,0], grid[:,1], alpha=0.5)
-    ax.axis('equal')
+    plt.figure('grid')
+    plt.clf()
 
-    if latt is not None:
-        cube = latt[:2, :2].T
-        Path = mpath.Path
+    plt.scatter(grid[:, 0], grid[:, 1], alpha=0.5)
+
+    if XX is not None and YY is not None:
+        plt.axis([XX[0], XX[1], YY[0], YY[1]])
+    plt.axis('equal')
+
+    if lattice is not None:
+        cube = lattice[:2, :2].T
         path_data = [
-            (Path.MOVETO, [0, 0]),
-            (Path.LINETO, cube[0]),
-            (Path.LINETO, cube[0]+cube[1]),
-            (Path.LINETO, cube[1]),
-            (Path.LINETO, [0, 0]),
+            (mpath.Path.MOVETO, [0, 0]),
+            (mpath.Path.LINETO, cube[0]),
+            (mpath.Path.LINETO, cube[0] + cube[1]),
+            (mpath.Path.LINETO, cube[1]),
+            (mpath.Path.LINETO, [0, 0]),
         ]
         codes, verts = zip(*path_data)
         path = mpath.Path(verts, codes)
         patch = mpatches.PathPatch(path, facecolor='#607d8b', alpha=0.3)
-        ax.add_patch(patch)
+        plt.gca().add_patch(patch)
 
+    plt.show()
 
-def plot_grid2(grid, c, s=200, vmin=None, vmax=None):
-    cmap = 'seismic'
-    G = gridspec.GridSpec(1, 1)
+def plot_color_on_grid(grid, c, s=20, latt=None, vv=None, XX=None, YY=None, cmap='seismic'):
+    import matplotlib.pyplot as plt
+    import matplotlib.path as mpath
+    import matplotlib.patches as mpatches
 
-    if vmax == None:
-        vmax = np.max(c)
-    if vmin == None:
-        vmin = np.min(c)
+    plt.figure('color_on_grid', figsize=[4,3], dpi=150)
+    plt.clf()
+    # cmap = 'seismic'
+
+    if vv is None:
+        vmin, vmax = np.min(c), np.max(c)
     levels = np.linspace(vmin, vmax, 500)
 
-    ax = subplot(G[0, 0])
-    plt.title('grid_K')
-    cs = ax.scatter(grid[:,0], grid[:,1], c=c, s=s, cmap=cmap, alpha=1, vmax=vmax, vmin=vmin)
-    ax.axis('equal')
+    # plt.title('grid_K')
+    cs = plt.scatter(grid[:,0], grid[:,1], c=c, s=s, cmap=cmap, alpha=1, vmax=vmax, vmin=vmin)
+
+    if XX is not None and YY is not None:
+        plt.axis([XX[0], XX[1], YY[0], YY[1]])
+    plt.axis('equal')
+
+    if latt is not None:
+        cube = latt[:2, :2].T
+        path_data = [
+            (mpath.Path.MOVETO, [0, 0]),
+            (mpath.Path.LINETO, cube[0]),
+            (mpath.Path.LINETO, cube[0] + cube[1]),
+            (mpath.Path.LINETO, cube[1]),
+            (mpath.Path.LINETO, [0, 0]),
+        ]
+        codes, verts = zip(*path_data)
+        path = mpath.Path(verts, codes)
+        patch = mpatches.PathPatch(path, facecolor='#ffff00', alpha=0.3)
+        plt.gca().add_patch(patch)
 
     cbar = plt.colorbar(cs)
     cbar.set_ticks(np.linspace(vmin, vmax, 5))
 
+    plt.tick_params(direction="in", pad=8)
+    plt.show()
 
 def plot_grid2_complex(grid, c, s=200, vmax=None):
+    from matplotlib.pyplot import subplot
+    import matplotlib.gridspec as gridspec
+
     cmap = 'seismic'
     G = gridspec.GridSpec(1, 1)
 
@@ -109,8 +131,9 @@ def plot_grid2_complex(grid, c, s=200, vmax=None):
 
     ax.quiver(grid[:, 0], grid[:, 1], np.cos(angle), np.sin(angle), scale=20, pivot='middle', color='grey')
 
-
 def plot_orbital(rr, un, grid, latt=None, cmap='Reds'):
+    from matplotlib.pyplot import subplot
+    import matplotlib.gridspec as gridspec
     import pylab
     # un = np.log(np.abs(un))
     un = np.abs(un)
@@ -145,7 +168,6 @@ def plot_orbital(rr, un, grid, latt=None, cmap='Reds'):
 
     plt.tight_layout()
     ax.axis('equal')
-
 
 # def plot_band(band, eemin=-3.0, eemax=3.0, unit='D', xlabel=None, save_csv=False):
 #     bandE = band['bandE']

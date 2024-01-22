@@ -13,8 +13,8 @@ packages_wanpy = [
 
 scripts_wanpy = [
     'scripts/wanpy',
-    'scripts/wpy_get_poscar_from_wout.py',
-    'scripts/wpy_set_fermi_eq_zero.py',
+    # 'scripts/wpy_get_poscar_from_wout.py',
+    # 'scripts/wpy_set_fermi_eq_zero.py',
     'scripts/wpyplotband',
     'scripts/statistic_cores',
     'scripts/findmsg',
@@ -39,6 +39,15 @@ setup(
         "Operating System :: OS Independent",
     ],
     python_requires='>=3.6',
-    install_requires=['numpy', 'scipy', 'sympy', 'matplotlib', 'pandas', 'mpi4py', 'h5py', 'fortio', 'spglib'],
+    install_requires=[
+        'numpy',
+        'scipy',
+        'sympy',
+        'matplotlib',
+        'pandas',
+        'mpi4py',
+        'h5py',
+        'fortio',
+        'spglib>=2.3.0'
+    ],
 )
-
