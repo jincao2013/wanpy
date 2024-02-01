@@ -38,6 +38,7 @@ class Symmetrize_Htb_rspace(object):
         self.nR = htb.nR
         self.R = htb.R
         self.Rc = htb.Rc
+        self.nw = htb.nw
 
         self.symmops = symmops
         self.atoms_pos = atoms_pos
@@ -60,17 +61,48 @@ class Symmetrize_Htb_rspace(object):
 
         self.nw_spinless = self.list_nw_at_pos.sum()
 
-        self.Rcij = np.einsum('ijRa->Rija', np.full((self.npos, self.npos, htb.nR, 3), self.Rc)) + \
-                    np.einsum('Rija->Rija', np.full((htb.nR, self.npos, self.npos, 3), self.pos_car)) - \
-                    np.einsum('Rjia->Rija', np.full((htb.nR, self.npos, self.npos, 3), self.pos_car))
+        self.Rcij = None
 
         self.wcc, self.wccf = self.get_atomic_wcc()
         self.iprint = iprint
 
+    def use_ngridR(self, ngridR):
+        """
+          resample the htb using larger ngridR
+        """
+
+        print('resampling htb with user specified ngridR = {} * {} * {}'.format(ngridR[0], ngridR[1], ngridR[2]))
+        ''' resample htb '''
+        htb = self.htb
+        nR, ndegen, gridR = make_ws_gridR(ngridR, self.latt, info=False)
+
+        meshk_resampled = make_mesh(nmesh=ngridR)
+        # meshkc = LA.multi_dot([self.lattG, meshk.T]).T
+        nk = meshk_resampled.shape[0]
+
+        hk_kmn_resampled = self.ft_gridR_to_meshk(htb.hr_Rmn, meshk_resampled, htb.R, htb.ndegen, tbgauge=False)
+        r_kamn_resampled = self.ft_gridR_to_meshk(htb.r_Ramn, meshk_resampled, htb.R, htb.ndegen, tbgauge=False)
+
+        hr_Rmn_resampled = self.ft_meshk_to_gridR(hk_kmn_resampled, meshk_resampled, gridR, tbgauge=False)
+        r_Ramn_resampled = self.ft_meshk_to_gridR(r_kamn_resampled, meshk_resampled, gridR, tbgauge=False)
+
+        ''' update self '''
+        self.nR = nR
+        self.R = gridR
+        self.Rc = (self.latt @ gridR.T).T
+
+        ''' update htb '''
+        htb.nR = nR
+        htb.R = self.R
+        htb.Rc = self.Rc
+        htb.ndegen = ndegen
+        htb.hr_Rmn = hr_Rmn_resampled
+        htb.r_Ramn = r_Ramn_resampled
+
     def run(self):
         check_valid_symmops(self.symmops)
         symmops, atoms_pos, atoms_orbi, soc = self.symmops, self.atoms_pos, self.atoms_orbi, self.soc
-        nw, nR, npos = self.htb.nw, self.nR, self.npos
+        nw, nR, npos = self.nw, self.nR, self.npos
 
         # set ndegen = ones
         htb = self.htb
@@ -78,10 +110,14 @@ class Symmetrize_Htb_rspace(object):
         r_Ramn = np.einsum('R,Ramn->Ramn', 1 / htb.ndegen, htb.r_Ramn, optimize=True)
         ndegen = np.ones(nR, dtype='int64')
 
-        couting_init = np.ones([htb.nR, npos, npos], dtype='float64')
-        couting_Rij = np.zeros([htb.nR, npos, npos], dtype='float64')
-        hr_Rmn_symm = np.zeros([htb.nR, htb.nw, htb.nw], dtype='complex128')
+        couting_init = np.ones([nR, npos, npos], dtype='float64')
+        couting_Rij = np.zeros([nR, npos, npos], dtype='float64')
+        hr_Rmn_symm = np.zeros([nR, nw, nw], dtype='complex128')
         # r_Ramn_symm = np.zeros([htb.nR, 3, htb.nw, htb.nw], dtype='complex128')
+
+        self.Rcij = np.einsum('ijRa->Rija', np.full((self.npos, self.npos, nR, 3), self.Rc)) + \
+                    np.einsum('Rija->Rija', np.full((nR, self.npos, self.npos, 3), self.pos_car)) - \
+                    np.einsum('Rjia->Rija', np.full((nR, self.npos, self.npos, 3), self.pos_car))
 
         for isym in range(self.nsymmops):
             print('Symmetrizing hr_kmn in real space {}/{}'.format(isym+1, self.nsymmops))
@@ -120,16 +156,38 @@ class Symmetrize_Htb_rspace(object):
 
         # update ndegen, hr_Rmn, r_Ramn
         print('update htb object ...')
-        self.htb.ndegen = ndegen
-        self.htb.hr_Rmn = hr_Rmn_symm
+        htb.ndegen = ndegen
+        htb.hr_Rmn = hr_Rmn_symm
         # self.htb.r_Ramn = r_Ramn_symm
 
         # update wcc, wccf, and diagonal part of r_Ramn
-        self.htb.wcc, self.htb.wccf = self.wcc, self.wccf
-        if np.nonzero(htb.R[htb.nR//2])[0].size != 0: raise WanpyError('R[nR//2] is not [0 0 0].')
+        htb.wcc, htb.wccf = self.wcc, self.wccf
+        if np.nonzero(self.R[nR//2])[0].size != 0: raise WanpyError('R[nR//2] is not [0 0 0].')
         for i in range(3):
-            self.htb.r_Ramn[self.htb.nR//2, i] *= 1 - np.eye(self.htb.nw)
-            self.htb.r_Ramn[self.htb.nR//2, i] += np.diag(self.wcc.T[i])
+            htb.r_Ramn[nR//2, i] *= 1 - np.eye(nw)
+            htb.r_Ramn[nR//2, i] += np.diag(self.wcc.T[i])
+
+    '''
+      * F.T. between R-space and k-space
+    '''
+    def ft_gridR_to_meshk(self, Rmn, meshk, gridR, ndegen, tbgauge):
+        eikR = np.exp(2j * np.pi * np.einsum('ka,Ra->kR', meshk, gridR, optimize=True))
+        if tbgauge:
+            eiktau = np.exp(2j * np.pi * np.einsum('ka,ja->kj', meshk, self.wccf))
+            kmn = np.einsum('R,kR,km,R...mn,kn->k...mn', 1/ndegen, eikR, eiktau.conj(), Rmn, eiktau, optimize=True)
+        else:
+            kmn = np.einsum('R,kR,R...mn->k...mn', 1/ndegen, eikR, Rmn, optimize=True)
+        return kmn
+
+    def ft_meshk_to_gridR(self, kmn, meshk, gridR, tbgauge):
+        nk = meshk.shape[0]
+        eikR = np.exp(2j * np.pi * np.einsum('ka,Ra->kR', meshk, gridR, optimize=True))
+        if tbgauge:
+            eiktau = np.exp(2j * np.pi * np.einsum('ka,ja->kj', meshk, self.wccf))
+            Rmn = np.einsum('kR,km,k...mn,kn->R...mn', eikR.conj(), eiktau, kmn, eiktau.conj(), optimize=True) / nk
+        else:
+            Rmn = np.einsum('kR,k...mn->R...mn', eikR.conj(), kmn, optimize=True) / nk
+        return Rmn
 
     def get_rep_TR(self, symmop, rep_pos):
         """
@@ -659,8 +717,12 @@ def get_proj_info(htb):
 
 def parse_symmetry_inputfile(fname='symmetry.in'):
 
+    def str_to_bool(s):
+        return {'t': True, 'f': False}.get(s.lower()[0], None)
+
     # set default values
     symmetric_method = 'kspace'
+    rspace_use_ngridR = False
     parse_symmetry = 'man'
     ngridR = None
     symprec = 1e-5
@@ -672,22 +734,26 @@ def parse_symmetry_inputfile(fname='symmetry.in'):
         while True:
             _pos = f.tell()
             inline = f.readline().split('#')[0]
+            inline_keyword = inline.split('=')[0].strip()
 
             if _pos == f.tell(): break
 
-            if 'symmetric_method' in inline:
+            if inline_keyword == 'symmetric_method':
                 symmetric_method = str(inline.split('=')[1].split()[0]).lower()
 
-            if 'parse_symmetry' in inline:
+            if inline_keyword == 'rspace_use_ngridR':
+                rspace_use_ngridR = str_to_bool(str(inline.split('=')[1].split()[0]).lower())
+
+            if inline_keyword == 'parse_symmetry':
                 parse_symmetry = str(inline.split('=')[1].split()[0]).lower()
 
-            if 'ngridR' in inline:
+            if inline_keyword == 'ngridR':
                 ngridR = [int(i) for i in inline.split('=')[1].split()]
 
-            if 'symprec' in inline:
+            if inline_keyword == 'symprec':
                 symprec = float(inline.split('=')[1].split()[0])
 
-            if 'magmoms' in inline:
+            if inline_keyword == '&magmoms':
                 while '/' not in inline:
                     inline = f.readline().split('#')[0]
                     magmoms_i = inline.split()
@@ -695,7 +761,7 @@ def parse_symmetry_inputfile(fname='symmetry.in'):
                         magmoms_i = [float(i) for i in magmoms_i]
                         magmoms.append(magmoms_i)
 
-            if 'symmops' in inline:
+            if inline_keyword == '&symmops':
                 while '/' not in inline:
                     inline = f.readline().split('#')[0]
                     symmops_i = inline.split()
@@ -711,6 +777,7 @@ def parse_symmetry_inputfile(fname='symmetry.in'):
 
     adict = {
         'symmetric_method': symmetric_method,
+        'rspace_use_ngridR': rspace_use_ngridR,
         'parse_symmetry': parse_symmetry,
         'ngridR': ngridR,
         'symprec': symprec,

@@ -44,13 +44,13 @@ def handle_wannier(args):
 
     T0 = time.time()
     dat_fmt = '12.6'
-    symmetric_method, ngridR_symmhtb, symmops = None, None, None
+    symmetric_method, rspace_use_ngridR, ngridR_symmhtb, symmops = None, None, None, None
 
     if args.symmetry:
         dat_fmt = '16.10'
         win = parse_symmetry_inputfile('symmetry.in')
-        symmetric_method, ngridR_symmhtb, symmops = \
-            win.symmetric_method, win.ngridR, win.symmops
+        symmetric_method, rspace_use_ngridR, ngridR_symmhtb, symmops = \
+            win.symmetric_method, win.rspace_use_ngridR, win.ngridR, win.symmops
 
         if win.parse_symmetry == 'auto':
             print('Using magmoms to determine msg, the following msg is found: ')
@@ -60,6 +60,7 @@ def handle_wannier(args):
 
     wanrun = WannierInterpolation(efermi, seedname=args.seedname,
                                   symmetric_htb=args.symmetry, symmetric_method=symmetric_method,
+                                  rspace_use_ngridR=rspace_use_ngridR,
                                   ngridR_symmhtb=ngridR_symmhtb, symmops=symmops,
                                   check_if_uudd_amn=True
                                   )
@@ -254,11 +255,12 @@ temp_input_file = """# Input file for building symmetric Wannier TB model
 
 # Choose method, default is kspace
 symmetric_method = rspace   # Options: {rspace, kspace}
+rspace_use_ngridR = F       # use ngridR to resample the TB model, default is False
 
 # Choose between manually setting symmops or automatically detecting symmops from magmoms
 parse_symmetry = man        # Options: {man, auto}
 
-ngridR = 12 12 1            # used in kspace method, and use a slightly larger value than the original TB model 
+ngridR = 12 12 1            # in kspace method, use a slightly larger value than the original TB model 
 
 # Parameters used when parse_symmetry = auto
 symprec = 1e-5

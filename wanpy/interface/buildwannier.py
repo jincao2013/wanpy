@@ -54,7 +54,8 @@ class WannierInterpolation(object):
     """
 
     def __init__(self, fermi=0., poscar_fname='POSCAR', seedname='wannier90',
-                 symmetric_htb=False, symmetric_method='kspace', ngridR_symmhtb=None, symmops=None,
+                 symmetric_htb=False, symmetric_method='kspace', rspace_use_ngridR=False,
+                 ngridR_symmhtb=None, symmops=None,
                  check_if_uudd_amn=True):
         self.poscar_fname = poscar_fname
         self.seedname = seedname
@@ -130,8 +131,9 @@ class WannierInterpolation(object):
             self.eig_win[ik, :w90_chk.ndimwin[ik]] = self.eig[ik, _index]
 
         # symmetry
-        self.symmetric_htb, self.symmetric_method, self.ngridR_symmhtb, self.symmops = \
-            symmetric_htb, symmetric_method, ngridR_symmhtb, symmops
+        self.symmetric_htb, self.symmetric_method, self.rspace_use_ngridR = \
+            symmetric_htb, symmetric_method, rspace_use_ngridR
+        self.ngridR_symmhtb, self.symmops = ngridR_symmhtb, symmops
 
         print('calculating F.T. matrix')
         self.eikR = np.exp(-2j * np.pi * np.einsum('ka,Ra->kR', self.meshkf, self.gridR))
@@ -196,9 +198,10 @@ class WannierInterpolation(object):
                                                 soc=self.htb.worbi.soc,
                                                 iprint=iprint,
                                                 )
+                if self.rspace_use_ngridR:
+                    symmhtb.use_ngridR(self.ngridR_symmhtb)
                 symmhtb.run()
                 self.htb = symmhtb.htb
-                pass
 
         if write_dat:
             print('write hr matrix')
