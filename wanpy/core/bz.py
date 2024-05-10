@@ -11,7 +11,7 @@
 
 __date__ = "Jan. 3, 2019"
 
-
+import math
 import numpy as np
 import numpy.linalg as LA
 from wanpy.core.units import *
@@ -34,14 +34,14 @@ def fermi_dirac_func(E, smear=0, ismear=0):
     """
 
     # zero temperature:
-    if smear == 0:
+    if np.isclose(smear, 0):
         f = (1. - np.sign(E)) / 2.
         return f
 
     # finite temperature:
     if ismear == -1:
         x = E / smear
-        x[x > 64.] = 64.
+        x = np.clip(x, -32, 32)
         f = 1. / (np.exp(x) + 1.)
         return f
     elif ismear == 0:
@@ -51,7 +51,7 @@ def fermi_dirac_func(E, smear=0, ismear=0):
         x = E / smear
         f = 0.5 * (1. - special.erf(x))
         for n in range(1, ismear + 1):
-            An = (-1) ** n / np.math.factorial(n) / 4 ** n / np.sqrt(np.pi)
+            An = (-1) ** n / math.factorial(n) / 4 ** n / np.sqrt(np.pi)
             hermite = special.hermite(2 * n - 1)
             f += An * hermite(x) * np.exp(-x ** 2)
 
@@ -67,9 +67,11 @@ def delta_func(E, smear=0.01, ismear=0):
     """
     if ismear == 0:
         x = E / smear
+        x = np.clip(x, -32, 32)
         delta = np.exp(-0.5 * x ** 2) / np.sqrt(2 * np.pi) / smear
     elif ismear == -1:
         x = E / smear / 2
+        x = np.clip(x, -32, 32)
         delta = 0.25 * np.cosh(x)**-2 / smear
     elif ismear == -2:
         x = E / smear
@@ -402,7 +404,7 @@ if __name__ == "__main__":
     x = E / smear
     delta1 = np.zeros_like(E)
     for n in range(1, ismear + 1):
-        An = (-1) ** n / np.math.factorial(n) / 4 ** n / np.sqrt(np.pi)
+        An = (-1) ** n / math.factorial(n) / 4 ** n / np.sqrt(np.pi)
         hermite = special.hermite(2 * n)
         delta1 += An * hermite(x) * np.exp(-x ** 2)
 

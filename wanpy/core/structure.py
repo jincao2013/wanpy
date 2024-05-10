@@ -1024,7 +1024,7 @@ class Htb(object):
         print('  |                                     R Grid                                  |')
         print('  |    number of R Grid = {:4}                                                  |'.format(nR))
         print('  +-----------------------------------------------------------------------------+')
-        for i in range(self.nR):
+        for i in range(nR):
             print('  |{: 4}). {: 3} {: 3} {: 3}  *{:2>} '.format(i + 1, gridR[i, 0], gridR[i, 1], gridR[i, 2], ndegen[i]), end='')
             if (i + 1) % 3 == 0:
                 print('  |')

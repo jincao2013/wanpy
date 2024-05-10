@@ -108,7 +108,7 @@ def wannier90_read_hr(fname):
         nw = int(hr_file.readline().strip())
         nR = int(hr_file.readline().strip())
 
-        ndegen = np.zeros((nR), dtype='int64')
+        ndegen = np.zeros(nR, dtype='int64')
         index = 0
         for i in range(math.ceil(nR / 15)):
             for j in hr_file.readline().split():
@@ -144,9 +144,9 @@ def wannier90_read_rr(fname):
                     inline = r_file.readline().split()
                     inline_m = int(inline[3]) - 1
                     inline_n = int(inline[4]) - 1
-                    r_Ramn[nrpts_i, 0, inline_m, inline_n] = np.complex(float(inline[5]), float(inline[6]))
-                    r_Ramn[nrpts_i, 1, inline_m, inline_n] = np.complex(float(inline[7]), float(inline[8]))
-                    r_Ramn[nrpts_i, 2, inline_m, inline_n] = np.complex(float(inline[9]), float(inline[10]))
+                    r_Ramn[nrpts_i, 0, inline_m, inline_n] = complex(float(inline[5]), float(inline[6]))
+                    r_Ramn[nrpts_i, 1, inline_m, inline_n] = complex(float(inline[7]), float(inline[8]))
+                    r_Ramn[nrpts_i, 2, inline_m, inline_n] = complex(float(inline[9]), float(inline[10]))
 
             R[nrpts_i] = np.array(inline[:3], dtype='int64')
 
@@ -167,10 +167,10 @@ def wannier90_read_spin(fname):
                     inline = f.readline().split()
                     inline_m = int(inline[3]) - 1
                     inline_n = int(inline[4]) - 1
-                    spin0_Rmn[nrpts_i, inline_m, inline_n] = np.complex(float(inline[5]), float(inline[6]))
-                    spin_Ramn[nrpts_i, 0, inline_m, inline_n] = np.complex(float(inline[7]), float(inline[8]))
-                    spin_Ramn[nrpts_i, 1, inline_m, inline_n] = np.complex(float(inline[9]), float(inline[10]))
-                    spin_Ramn[nrpts_i, 2, inline_m, inline_n] = np.complex(float(inline[11]), float(inline[12]))
+                    spin0_Rmn[nrpts_i, inline_m, inline_n] = complex(float(inline[5]), float(inline[6]))
+                    spin_Ramn[nrpts_i, 0, inline_m, inline_n] = complex(float(inline[7]), float(inline[8]))
+                    spin_Ramn[nrpts_i, 1, inline_m, inline_n] = complex(float(inline[9]), float(inline[10]))
+                    spin_Ramn[nrpts_i, 2, inline_m, inline_n] = complex(float(inline[11]), float(inline[12]))
 
             R[nrpts_i] = np.array(inline[:3], dtype='int64')
 
@@ -193,9 +193,9 @@ def wannier90_read_rr_v2x(fname, nR):
                     inline = r_file.readline().split()
                     inline_m = int(inline[3]) - 1
                     inline_n = int(inline[4]) - 1
-                    r_Ramn[nrpts_i, 0, inline_m, inline_n] = np.complex(float(inline[5]), float(inline[6]))
-                    r_Ramn[nrpts_i, 1, inline_m, inline_n] = np.complex(float(inline[7]), float(inline[8]))
-                    r_Ramn[nrpts_i, 2, inline_m, inline_n] = np.complex(float(inline[9]), float(inline[10]))
+                    r_Ramn[nrpts_i, 0, inline_m, inline_n] = complex(float(inline[5]), float(inline[6]))
+                    r_Ramn[nrpts_i, 1, inline_m, inline_n] = complex(float(inline[7]), float(inline[8]))
+                    r_Ramn[nrpts_i, 2, inline_m, inline_n] = complex(float(inline[9]), float(inline[10]))
 
             R[nrpts_i] = np.array(inline[:3], dtype='int64')
 

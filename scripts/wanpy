@@ -78,10 +78,10 @@ def handle_htb(args):
 
     efermi = args.efermi
     if args.efermi is None:
-        fermi = 0.0
+        efermi = 0.0
         if os.path.exists('vasprun.xml'):
-            fermi = float(re.findall('.\d+.\d+', os.popen('grep efermi vasprun.xml').readline())[0])
-            print('fermi level is {} readed from vasprun.xml'.format(fermi))
+            efermi = float(re.findall('.\d+.\d+', os.popen('grep efermi vasprun.xml').readline())[0])
+            print('fermi level is {} readed from vasprun.xml'.format(efermi))
 
     # print instructions
     print('check the wcc before calculations.')
@@ -91,7 +91,7 @@ def handle_htb(args):
     print('use_ws_distance      =  F (see J. Phys. Cond. Matt. 32, 165902 (2020))')
     # print('transl_inv           =  T')    # postw90 tag
 
-    htb = Htb(fermi)
+    htb = Htb(efermi)
 
     T0 = time.time()
     htb.load_wannier90_dat(seedname=args.seedname, load_wsvec=args.load_wsvec)

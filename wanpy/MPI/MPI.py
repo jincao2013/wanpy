@@ -109,7 +109,7 @@ def MPI_Gather(MPI, iterprint=100, dtype='float64', mpinote=False):
             if MPI_main:
                 kgps = get_kgroups(kps, MPI_ncore, mode='distributeC')
                 nk_list = [i.shape[0] for i in kgps]     # num_of_k_per_core
-                sendcounts = [_nk * np.product(dim) for _nk in nk_list]     # num_of_k_per_core
+                sendcounts = [_nk * np.prod(dim) for _nk in nk_list]     # num_of_k_per_core
                 # print(nk_list)
             else:
                 kgps, nk_list, sendcounts = None, None, None
@@ -169,21 +169,21 @@ def MPI_Gather(MPI, iterprint=100, dtype='float64', mpinote=False):
   * Par toolkits
 '''
 def get_kgroups(kps, Ncore, mode='distributeF'):
-    '''
+    """
       :param kps: Jobs list in shape of (Nk, ...)
       :param Ncore: Number of cores to excute jobs
       :return kgps: a group of job list
 
       * distributeF mode (default)
         distribute jobs along core index (Fortran like)
-        eg.
+        e.g.
         [1, 3, 5, 7, 9]
         [2, 4, 6, 8]
         This mode have better resouce balance.
 
       * distributeC mode
         distribute jobs along job index (C like)
-        eg.
+        e.g.
         [1, 2, 3, 4, 5]
         [6, 7, 8, 9]
         Choose this mode if you wish the cpu excute your
@@ -194,7 +194,7 @@ def get_kgroups(kps, Ncore, mode='distributeF'):
         of kpoints groups in the same seqence of kps.
         The jobs will be excuted in original seqence, however, the
         last core may have few number of jobs.
-    '''
+    """
     Nk = kps.shape[0]
 
     if mode == 'distributeF':
