@@ -38,7 +38,7 @@ def get_ntheta_from_rotmatrix(TR, tau, rot_car, atol=1e-5):
     u, v = LA.eig(det * rot_car)
 
     axis = np.real(v.T[np.argwhere(np.isclose(u, 1))[0,0]])
-    _theta = np.arccos((np.trace(det * rot_car) - 1)/2) # [0, pi]
+    _theta = np.arccos(np.clip((np.trace(det * rot_car) - 1)/2, -1, 1)) # [0, pi]
     nx, ny, nz = axis
     taux, tauy, tauz = tau
 
@@ -62,17 +62,18 @@ def print_spg(cell_nonmag, latt, symprec=1e-5):
     spg_symbol = spglib.get_spacegroup(cell_nonmag, symprec=symprec, angle_tolerance=-1.0, symbol_type=0)
     info_spg = spglib.get_symmetry(cell_nonmag, symprec=symprec, angle_tolerance=-1.0, mag_symprec=-1.0)
     info_spg_dataset = spglib.get_symmetry_dataset(cell_nonmag, symprec=symprec)
-    info_standard_spg = spglib.get_symmetry_from_database(info_spg_dataset.get('hall_number'))
+    info_standard_spg = spglib.get_symmetry_from_database(info_spg_dataset.hall_number)
 
-    pointgroup = info_spg_dataset.get('pointgroup')
-    rot = info_spg_dataset.get('rotations')
-    tau = info_spg_dataset.get('translations')
+    pointgroup = info_spg_dataset.pointgroup
+    rot = info_spg_dataset.rotations
+    tau = info_spg_dataset.translations
     tau[np.abs(tau) < 1e-5] = 0
     n_operations = rot.shape[0]
     symmops = [get_ntheta_from_rotmatrix(0, tau[i], latt @ rot[i] @ LA.inv(latt), atol=symprec) for i in range(n_operations)]
 
+    # # debug
     # for i in range(n_operations):
-    #     print(tau[i], rot[i])
+    #     print(tau[i], '\n', rot[i])
     #     print(symmops[i])
     #     print('\n')
 
@@ -113,16 +114,16 @@ def print_spg(cell_nonmag, latt, symprec=1e-5):
 def print_msg(cell_mag, latt, symprec=1e-5):
     info_mag = spglib.get_magnetic_symmetry(cell_mag, symprec=symprec, angle_tolerance=-1.0, mag_symprec=-1.0)
     info_mag_dataset = spglib.get_magnetic_symmetry_dataset(cell_mag, symprec=symprec)
-    msg_symbol = spglib.get_magnetic_spacegroup_type(info_mag_dataset.get('uni_number'))
-    info_standard_msg = spglib.get_magnetic_symmetry_from_database(info_mag_dataset.get('uni_number'))
+    msg_symbol = spglib.get_magnetic_spacegroup_type(info_mag_dataset.uni_number)
+    info_standard_msg = spglib.get_magnetic_symmetry_from_database(info_mag_dataset.uni_number)
 
-    n_operations = info_mag_dataset.get('n_operations')
-    msg_type = info_mag_dataset.get('msg_type')
-    bns_number = msg_symbol.get('bns_number')
-    rot = info_mag_dataset.get('rotations')
-    tau = info_mag_dataset.get('translations')
+    n_operations = info_mag_dataset.n_operations
+    msg_type = info_mag_dataset.msg_type
+    bns_number = msg_symbol.bns_number
+    rot = info_mag_dataset.rotations
+    tau = info_mag_dataset.translations
     tau[np.abs(tau) < 1e-5] = 0
-    TR = info_mag_dataset.get('time_reversals')
+    TR = info_mag_dataset.time_reversals
     symmops = [get_ntheta_from_rotmatrix(int(TR[i]), tau[i], latt @ rot[i] @ LA.inv(latt), atol=symprec) for i in range(n_operations)]
 
     index_msg = db_msg.msg_BNS_number.index(bns_number)
@@ -190,15 +191,16 @@ if __name__ == "__main__":
     print('\n- Symmetry search tolerance in the unit of length is: {:10.7f} Angstrom. '.format(symprec))
 
     unitcell, optional_structure_info = read_crystal_structure(fname_poscar)
-    num_atoms = unitcell.get_number_of_atoms()
-    latt = unitcell.get_cell().T
+    num_atoms = unitcell.numbers
+    # latt = unitcell.get_cell().T
+    latt = unitcell.cell.T
 
     cell_nonmag = (
-        unitcell.get_cell(),
+        unitcell.cell,
         # unitcell.get_positions(),
-        unitcell.get_scaled_positions(),
-        unitcell.get_atomic_numbers(),
-        np.zeros_like(unitcell.get_atomic_numbers()),
+        unitcell.scaled_positions,
+        unitcell.numbers,
+        np.zeros_like(unitcell.numbers),
     )
 
     if fname_magmoms is not None:
@@ -232,6 +234,7 @@ if __name__ == "__main__":
         print('\n\nMagnetic space group for magnetic structure (symprec:{:10.7f} Angstrom)'.format(symprec))
         print_msg(cell_mag, latt, symprec=symprec)
         print('\n* TR = 0 (without TR) or TR = 1 (with TR)')
+
 
 # ''' debug '''
 # if __name__ == "__main__":

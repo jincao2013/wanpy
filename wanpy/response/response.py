@@ -93,7 +93,7 @@ class Res_unit(Enum):
 '''
   * basic functions on htb
 '''
-def get_fft001(htb, k, sym_h=True, sym_r=True, imaxgap='null', maxgap=-1.0):
+def get_fft001(htb, k, sym_h=True, sym_r=True, imaxgap='null', maxgap=-1.0, randomgauge=False):
     # maxgap determine if reture zero response
     # maxgap < 0 do not enforce to returen zero response
     eikr_hr = np.exp(2j * np.pi * np.einsum('a,ia', k, htb.R_hr))
@@ -120,8 +120,9 @@ def get_fft001(htb, k, sym_h=True, sym_r=True, imaxgap='null', maxgap=-1.0):
     if sym_r:
         Awk = 0.5 * (Awk + np.einsum('amn->anm', Awk.conj()))
 
-    vw = hkk + 1j * (
-            np.einsum('lm,amn->aln', hk, Awk, optimize=True) - np.einsum('alm,mn->aln', Awk, hk, optimize=True))
+    vw = hkk + 1j * (np.einsum('lm,amn->aln', hk, Awk, optimize=True) - np.einsum('alm,mn->aln', Awk, hk, optimize=True))
+    if randomgauge:
+        U = np.einsum('jn,n->jn', U, np.exp(2j * np.pi * np.random.random(htb.nw)))
     v = np.einsum('mi,aij,jn->amn', U.conj().T, vw, U, optimize=True)
     # v = U.conj().T @ vw @ U
     return v, vw, E, U, hk, hkk, Awk

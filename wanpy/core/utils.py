@@ -36,6 +36,7 @@ __all__ = [
     # Criterion
     'check_valid_symmops',
     'wanpy_check_if_uudd_amn',
+    'get_random_unitary_matrix',
 ]
 
 """
@@ -294,3 +295,8 @@ def wanpy_check_if_uudd_amn(wcc, wbroaden, info=False):
     if_uudd_amn = (distance_udud > 0.1 > distance_uudd) or (maxdiff_broden_udud > 0.1 > maxdiff_broden_uudd)
     return if_uudd_amn
 
+def get_random_unitary_matrix(N):
+    h = np.random.random([N, N]) + 1j * np.random.random([N, N])
+    h = h + h.conj().T
+    w, v = LA.eigh(h)
+    return v
