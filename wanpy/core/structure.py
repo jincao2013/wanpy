@@ -14,6 +14,9 @@ __date__ = "May. 23, 2020"
 import os
 import errno
 import sys
+
+from wanpy.core.errorhandler import WanpyInputError
+
 sys.path.append(os.environ.get('PYTHONPATH'))
 import spglib
 from enum import Enum, unique
@@ -253,17 +256,20 @@ class Cell(object):
 
         info_mag = spglib.get_magnetic_symmetry(cell_mag, symprec=symprec, angle_tolerance=-1.0, mag_symprec=-1.0)
         info_mag_dataset = spglib.get_magnetic_symmetry_dataset(cell_mag, symprec=symprec)
-        msg_symbol = spglib.get_magnetic_spacegroup_type(info_mag_dataset.get('uni_number'))
-        info_standard_msg = spglib.get_magnetic_symmetry_from_database(info_mag_dataset.get('uni_number'))
+        msg_symbol = spglib.get_magnetic_spacegroup_type(info_mag_dataset.uni_number)
+        info_standard_msg = spglib.get_magnetic_symmetry_from_database(info_mag_dataset.uni_number)
 
-        n_operations = info_mag_dataset.get('n_operations')
-        msg_type = info_mag_dataset.get('msg_type')
-        bns_number = msg_symbol.get('bns_number')
-        rot = info_mag_dataset.get('rotations')
-        tau = info_mag_dataset.get('translations')
+        n_operations = info_mag_dataset.n_operations
+        msg_type = info_mag_dataset.msg_type
+        bns_number = msg_symbol.bns_number
+        rot = info_mag_dataset.rotations
+        tau = info_mag_dataset.translations
         tau[np.abs(tau) < 1e-5] = 0
-        TR = info_mag_dataset.get('time_reversals')
-        symmops = np.array([get_ntheta_from_rotmatrix(int(TR[i]), tau[i], latt @ rot[i] @ LA.inv(latt), atol=symprec) for i in range(n_operations)])
+        TR = info_mag_dataset.time_reversals
+        symmops = np.array(
+            [get_ntheta_from_rotmatrix(int(TR[i]), tau[i], latt @ rot[i] @ LA.inv(latt), atol=symprec)
+             for i in range(n_operations)
+        ])
 
         if info:
             print('\n\nMagnetic space group for magnetic structure (symprec:{:10.7f} Angstrom)'.format(symprec))
@@ -346,7 +352,8 @@ class Worbi(object):
         self.proj_spin_qaxis = None
         self.soc = None
 
-    def load_from_nnkp(self, seedname='wannier90', uudd_amn=True):
+    def load_from_nnkp(self, convert_to_uudd, wannier_center_def, seedname='wannier90'):
+        print(f'reading {seedname}.nnkp into htb.worbi')
         fname = seedname + '.nnkp'
         with open(fname, 'r') as f:
             inline = f.readline()
@@ -398,9 +405,8 @@ class Worbi(object):
                         inline = f.readline().split()
                         self.proj_spin[i] = np.array(inline[0], dtype='int64')
                         self.proj_spin_qaxis[i] = np.array(inline[1:], dtype='float64')
-                    self.proj_wcc = LA.multi_dot([self.latt, self.proj_wccf.T]).T
 
-                    if uudd_amn:
+                    if convert_to_uudd:
                         # transform nnkp from udud to uudd order
                         nw = self.nw
                         self.proj_wccf = np.einsum('nsa->sna', self.proj_wccf.reshape([nw//2, 2, -1])).reshape([nw, 3])
@@ -428,9 +434,22 @@ class Worbi(object):
                         self.proj_z[i] = np.array(inline[:3], dtype='float64')
                         self.proj_x[i] = np.array(inline[3:-1], dtype='float64')
                         self.proj_zona[i] = np.array(inline[-1], dtype='float64')
-                    self.proj_wcc = LA.multi_dot([self.latt, self.proj_wccf.T]).T
                 else:
                     pass
+
+        if wannier_center_def.lower() == 'ws':
+            print('\033[91muse ws definition of wannier center\033[0m in htb.worib')
+            # refined in range of [-0.5, 0.5) to keep in line with the wannier center
+            # used in calculating amn in VASP 6.4.3.
+            self.proj_wccf = np.remainder(self.proj_wccf + 100.5, 1) - 0.5
+        elif wannier_center_def.lower() == 'poscar':
+            print('\033[0muse poscar definition of wannier center\033[0m in htb.worib')
+            # proj_wccf origins from wannier_setup, and are in line with POSCAR,
+            # if wannier_center_def = poscar, do nothing here.
+            pass
+        else:
+            WanpyInputError('wannier_center_def should be poscar or ws')
+        self.proj_wcc = (self.latt @ self.proj_wccf.T).T
 
     def save_h5(self, fname='worbi.h5'):
         with h5py.File(fname, "a") as f:
@@ -701,6 +720,7 @@ class Htb(object):
                            poscar_fname=r'POSCAR',
                            seedname='wannier90',
                            load_wsvec=False,
+                           wannier_center_def='poscar',
                            ):
         wout_fname = seedname + '.wout'
         nnkp_fname = seedname + '.nnkp'
@@ -726,7 +746,7 @@ class Htb(object):
         nnkp_wanning = False
         if os.path.exists(nnkp_fname):
             nnkp_wanning = True
-            self.worbi.load_from_nnkp(seedname, uudd_amn=True)
+            self.worbi.load_from_nnkp(convert_to_uudd=True, wannier_center_def=wannier_center_def, seedname=seedname)
             print('loaded from {}'.format(nnkp_fname))
         else:
             print('\033[0;31mfile not found: {} \033[0m'.format(nnkp_fname))

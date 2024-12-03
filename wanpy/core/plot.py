@@ -159,8 +159,8 @@ def plot_orbital(rr, un, grid, latt=None, cmap='Reds'):
     levels = np.linspace(vmin, vmax, 500)
     CS = plt.contourf(rr[:,:,0], rr[:,:,1], un, levels, vmax=vmax, vmin=vmin, cmap=cmap)
 
-    plt.xlabel('$X (\mathring{A})$')
-    plt.ylabel('$Y (\mathring{A})$')
+    plt.xlabel('$X$')
+    plt.ylabel('$Y$')
 
     cbar = plt.colorbar(CS)
     cbar.set_label('$|g_n>$')

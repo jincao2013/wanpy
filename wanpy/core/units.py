@@ -62,7 +62,7 @@ Angstrom = 1.0e-10  # [m]
 THz = 1.0e12        # [/s]
 Mu0 = 4.0e-7 * pi   # [Henry/m] or [N/A^2]
 Epsilon0 = 1.0 / Mu0 / SpeedOfLight**2 # [C^2 / N m^2]
-Me = 9.10938215e-31
+Me = 9.10938215e-31 # [kg]
 
 Bohr = 4e10 * pi * Epsilon0 * Hbar**2 / Me  # Bohr radius [A] 0.5291772
 Hartree = Me * EV / 16 / pi**2 / Epsilon0**2 / Hbar**2 # Hartree [eV] 27.211398

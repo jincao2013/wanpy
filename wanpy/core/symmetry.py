@@ -17,7 +17,7 @@ from numpy import linalg as LA
 from scipy.spatial import distance_matrix
 from scipy.linalg import block_diag
 import sympy as sp
-from wanpy.core.errorhandler import WanpyError
+from wanpy.core.errorhandler import WanpyError, WanpyInputError
 from wanpy.core.mesh import make_mesh, make_ws_gridR
 from wanpy.core.utils import get_op_cartesian, check_valid_symmops
 from wanpy.core.units import *
@@ -28,6 +28,31 @@ __all__ = [
     'get_proj_info',
     'parse_symmetry_inputfile',
 ]
+
+"""
+* Note 
+  Dec 2, 2024
+    The wannier interface (for both v1.2 and v3.1) wannier_setup retures proj_site according to POSCAR,
+    and the atomic positions are typically in range of [0, 1), for example by generated from VESTA or phonopy.
+    Starting from vasp version 6, when proj_site are obtained from wannier_setup, it will be refined in range 
+    of [-0.5, 0.5), see line 1154 of mlwf.F in vasp 6.4.3. For example, for a POSCAR: 
+    
+    0.0000000000000000  0.5999686590902087  0.3517463977113349 <--- pos 1
+    0.5000000000000000  0.3998626154247874  0.1156965177456744 <--- pos 2
+    
+    We will have the following in OUTCAR: 
+   LOCPROJ orbitals
+     ----------------------------------------------------------------------------------------------
+      n  l  m   za        pos                       proj_x                    proj_z
+     ----------------------------------------------------------------------------------------------
+      1  2  1   1.890     0.000  -0.400   0.352     1.000   0.000   0.000     0.000   0.000   1.000 <--- pos 1
+      ... 
+      1  2  1   1.890    -0.500   0.400   0.116     1.000   0.000   0.000     0.000   0.000   1.000 <--- pos 2
+      ... 
+    
+    Therefore, for amn generted by vasp 6, we need set input of atoms_pos in range of [-0.5, 0.5). 
+    
+"""
 
 class Symmetrize_Htb_rspace(object):
 
@@ -44,6 +69,8 @@ class Symmetrize_Htb_rspace(object):
         self.atoms_pos = atoms_pos
         self.atoms_orbi = atoms_orbi
         self.soc = soc
+
+        # self.atoms_pos = [np.remainder(i + np.array([100.5, 100.5, 100.5]), 1.0) - 0.5 * np.ones(3) for i in atoms_pos]
 
         self.pos_car = (self.latt @ np.vstack(self.atoms_pos).T).T
 
@@ -272,6 +299,7 @@ class Symmetrize_Htb_rspace(object):
       * update wannier center
     '''
     def get_atomic_wcc(self):
+        """ get wcc and wccf from input: atoms_orbi """
         _wccf = []
         for i in range(self.ntype_atoms):
             ion = self.atoms_pos[i]
@@ -415,6 +443,7 @@ class Symmetrize_Htb_kspace(object):
       * update wannier center
     '''
     def get_atomic_wcc(self):
+        """ get wcc and wccf from input: atoms_orbi """
         _wccf = []
         for i in range(self.ntype_atoms):
             ion = self.atoms_pos[i]
@@ -471,6 +500,7 @@ class Symmetrize_Htb_kspace(object):
         _corep = []
         for i in range(self.ntype_atoms):
             ion = atoms_pos[i]
+            ion = np.remainder(ion, 1) # define the un-roted ion in [0, 1) # added at v0.15.2
             orbi_l = atoms_orbi[i]
 
             # get op_orbi
@@ -484,7 +514,8 @@ class Symmetrize_Htb_kspace(object):
             ion_car_rot = (rot @ ion_car.T).T + tau_car
 
             ion_rot = (LA.inv(self.latt) @ ion_car_rot.T).T
-            ion_rot = np.remainder(ion_rot + 1e-5, 1.0)    # move ion at 1- to 0+
+            # ion_rot = np.remainder(ion_rot + 1e-5, 1.0)    # move ion at 1- to 0+ # removed at v0.15.2
+            ion_rot = np.remainder(ion_rot, 1.0)  # move ion_rot at [0, 1) # added at v0.15.2
             ion_car_rot = (self.latt @ ion_rot.T).T
 
             dismat = distance_matrix(ion_car, ion_car_rot)
@@ -545,6 +576,7 @@ def get_corep(symmop, latt, atoms_pos, atoms_orbi, soc):
     _rep_pos = []
     for i in range(ntype_atoms):
         ion = atoms_pos[i]
+        ion = np.remainder(ion, 1) # define the un-roted ion in [0, 1) # added at v0.15.2
         orbi_l = atoms_orbi[i]
 
         # get op_orbi
@@ -558,7 +590,8 @@ def get_corep(symmop, latt, atoms_pos, atoms_orbi, soc):
         ion_car_rot = (rot @ ion_car.T).T + tau_car
 
         ion_rot = (LA.inv(latt) @ ion_car_rot.T).T
-        ion_rot = np.remainder(ion_rot + 1e-5, 1.0)  # move ion at 1- to 0+
+        # ion_rot = np.remainder(ion_rot + 1e-5, 1.0)  # move ion at 1- to 0+ # removed at v0.15.2
+        ion_rot = np.remainder(ion_rot, 1.0)  # move ion_rot at [0, 1) # added at v0.15.2
         ion_car_rot = (latt @ ion_rot.T).T
 
         dismat = distance_matrix(ion_car, ion_car_rot)
@@ -602,10 +635,10 @@ def get_rep_atomic(symmop, l):
             D[2, m] = func_rot.coeff(y)     # py
         elif l == 2:
             D[0, m] = func_rot.coeff(z**2) * np.sqrt(3)                   # dz2
-            D[1, m] = func_rot.coeff(x).coeff(z)                                # dxz
-            D[2, m] = func_rot.coeff(y).coeff(z)                                # dyz
+            D[1, m] = func_rot.coeff(x).coeff(z)                          # dxz
+            D[2, m] = func_rot.coeff(y).coeff(z)                          # dyz
             D[3, m] = func_rot.coeff(x**2) * 2 + D[0, m] / np.sqrt(3)     # dx2-y2
-            D[4, m] = func_rot.coeff(x).coeff(y)                                # dxy
+            D[4, m] = func_rot.coeff(x).coeff(y)                          # dxy
         elif l == 3:
             D[0, m] = func_rot.coeff(z**3) * np.sqrt(15)                                # fz3
             D[1, m] = func_rot.coeff(x).coeff(z**2) * np.sqrt(10) / 2                   # fxz2
@@ -644,7 +677,7 @@ def Ylm(l, m, r):
         if m == 5: return x*(x**2 - 3*y**2)/2/np.sqrt(6)                # fx(x2-3y2)
         if m == 6: return y*(3*x**2 - y**2)/2/np.sqrt(6)                # fy(3x2-y2)
 
-def get_proj_info(htb):
+def get_proj_info(htb, wannier_center_def):
     """
       * Get atoms_pos, atoms_orbi from htb
         used to simply the input of Symmetrize_Htb
@@ -661,19 +694,39 @@ def get_proj_info(htb):
 
     proj_l = htb.worbi.proj_lmr.T[0][:nw]
     proj_wccf = htb.worbi.proj_wccf[:nw]
+    ion = htb.cell.ions
+    spec = htb.cell.spec
+    if wannier_center_def.lower() == 'ws':
+        # refined in range of [-0.5, 0.5) to keep in line with the wannier center
+        # used in calculating amn in VASP 6.4.3.
+        proj_wccf = np.remainder(proj_wccf + 100.5, 1) - 0.5
+        ion = np.remainder(ion + 100.5, 1) - 0.5
+    elif wannier_center_def.lower() == 'poscar':
+        # proj_wccf origins from wannier_setup, and are in line with POSCAR,
+        # if wannier_center_def = poscar, do nothing here.
+        pass
+    else:
+        WanpyInputError('wannier_center_def should be poscar or ws')
 
     i = 0
     while True:
         # print(i)
         if i >= nw: break
         wccf = proj_wccf[i]
-        index_ion_first = np.argmin(LA.norm(wccf - htb.cell.ions, axis=1))
-        index_ion_all = np.where(np.array(htb.cell.spec) == htb.cell.spec[index_ion_first])[0]
+        # find one index of ion closing to proj_wccf[i]
+        index_ion_first = np.argmin(LA.norm(wccf - ion, axis=1))
+        # get name of the jth spec of this proj_wccf[i]
+        atoms_spec_j = spec[index_ion_first]
+        # find indexes of all atoms of the jth spec
+        index_ion_all = np.where(np.array(spec) == atoms_spec_j)[0]
         n_ion = index_ion_all.size
-        atoms_spec_j = htb.cell.spec[index_ion_first]
-        atoms_pos_j = htb.cell.ions[index_ion_all]
+        # find all atomic positions of the jth spec
+        atoms_pos_j = ion[index_ion_all]
 
+        # how many proj_wccf share the same position of proj_wccf[i],
+        # i.e., the number of orbitals on this atomic position
         n = np.where(np.isclose(proj_wccf, wccf).all(axis=1))[0].size
+        # get l of jth spec
         _, index_orbi = np.unique(proj_l[i:i+n], return_index=True)
         atoms_orbi_j = proj_l[i:i+n][np.sort(index_orbi)]
 
@@ -683,37 +736,15 @@ def get_proj_info(htb):
         atoms_spec.append(atoms_spec_j)
         atoms_orbi.append(atoms_orbi_j)
 
+    # if standardize_atoms_pos:
+    #     # refine atoms_pos in range of [-0.5, 0.5)
+    #     atoms_pos = [np.remainder(i + 100.5, 1) - 0.5 for i in atoms_pos]
+
     print('wanpy found the following projections:')
     for j in range(len(atoms_pos)):
         print(atoms_spec[j], ':', ' '.join([orbital_dict[i] for i in atoms_orbi[j]]) )
 
     return atoms_pos, atoms_orbi
-
-# def read_symmetry_inputfile(fname='symmetry.in'):
-#     symmops = []
-#     with open(fname, 'r') as f:
-#         while True:
-#             inline = f.readline().split('#')[0]
-#
-#             if not inline:
-#                 break
-#
-#             if 'ngridR' in inline:
-#                 ngridR = [int(i) for i in inline.split()[-3:]]
-#
-#             if 'symmops' in inline:
-#                 while '/' not in inline:
-#                     inline = f.readline().split('#')[0]
-#                     symmops_i = inline.split()
-#                     if len(symmops_i) == 9:
-#                         symmops_i = [float(i) for i in symmops_i]
-#                         symmops_i[2] = symmops_i[2]/180 * np.pi
-#                         symmops.append(symmops_i)
-#                         assert int(symmops_i[0]) in [0, 1]
-#                         assert int(symmops_i[1]) in [-1, 1]
-#     symmops = np.array(symmops)
-#     f.close()
-#     return ngridR, symmops
 
 def parse_symmetry_inputfile(fname='symmetry.in'):
 
@@ -724,6 +755,7 @@ def parse_symmetry_inputfile(fname='symmetry.in'):
     symmetric_method = 'kspace'
     rspace_use_ngridR = False
     parse_symmetry = 'man'
+    wannier_center_def = None
     ngridR = None
     symprec = 1e-5
     magmoms = []
@@ -736,7 +768,7 @@ def parse_symmetry_inputfile(fname='symmetry.in'):
             inline = f.readline().split('#')[0]
             inline_keyword = inline.split('=')[0].strip()
 
-            if _pos == f.tell(): break
+            if _pos == f.tell(): break          # If no new line was read, exit the loop
 
             if inline_keyword == 'symmetric_method':
                 symmetric_method = str(inline.split('=')[1].split()[0]).lower()
@@ -746,6 +778,9 @@ def parse_symmetry_inputfile(fname='symmetry.in'):
 
             if inline_keyword == 'parse_symmetry':
                 parse_symmetry = str(inline.split('=')[1].split()[0]).lower()
+
+            if inline_keyword == 'wannier_center_def':
+                wannier_center_def = str(inline.split('=')[1].split()[0]).lower()
 
             if inline_keyword == 'ngridR':
                 ngridR = [int(i) for i in inline.split('=')[1].split()]
@@ -779,6 +814,7 @@ def parse_symmetry_inputfile(fname='symmetry.in'):
         'symmetric_method': symmetric_method,
         'rspace_use_ngridR': rspace_use_ngridR,
         'parse_symmetry': parse_symmetry,
+        'wannier_center_def': wannier_center_def,
         'ngridR': ngridR,
         'symprec': symprec,
         'magmoms': magmoms,

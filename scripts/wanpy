@@ -36,7 +36,7 @@ def handle_wannier(args):
     if args.efermi is None:
         efermi = 0.0
         if os.path.exists('vasprun.xml'):
-            efermi = float(re.findall('.\d+.\d+', os.popen('grep efermi vasprun.xml').readline())[0])
+            efermi = float(re.findall(r'.\d+.\d+', os.popen('grep efermi vasprun.xml').readline())[0])
             print('fermi level is {} readed from vasprun.xml'.format(efermi))
 
     if args.cal_spin:
@@ -44,14 +44,12 @@ def handle_wannier(args):
 
     T0 = time.time()
     dat_fmt = '12.6'
-    symmetric_method, rspace_use_ngridR, ngridR_symmhtb, symmops = None, None, None, None
+    # symmetric_method, rspace_use_ngridR, ngridR_symmhtb, symmops = None, None, None, None
+    win = parse_symmetry_inputfile('symmetry.in')
+    symmops = win.symmops
 
     if args.symmetry:
         dat_fmt = '16.10'
-        win = parse_symmetry_inputfile('symmetry.in')
-        symmetric_method, rspace_use_ngridR, ngridR_symmhtb, symmops = \
-            win.symmetric_method, win.rspace_use_ngridR, win.ngridR, win.symmops
-
         if win.parse_symmetry == 'auto':
             print('Using magmoms to determine msg, the following msg is found: ')
             cell = Cell()
@@ -59,9 +57,10 @@ def handle_wannier(args):
             symmops = cell.get_msg(win.magmoms, win.symprec, info=True)
 
     wanrun = WannierInterpolation(efermi, seedname=args.seedname,
-                                  symmetric_htb=args.symmetry, symmetric_method=symmetric_method,
-                                  rspace_use_ngridR=rspace_use_ngridR,
-                                  ngridR_symmhtb=ngridR_symmhtb, symmops=symmops,
+                                  symmetric_htb=args.symmetry, symmetric_method=win.symmetric_method,
+                                  wannier_center_def=win.wannier_center_def,
+                                  rspace_use_ngridR=win.rspace_use_ngridR,
+                                  ngridR_symmhtb=win.ngridR, symmops=symmops,
                                   check_if_uudd_amn=True
                                   )
     wanrun.run(cal_r=args.cal_r, cal_spin=args.cal_spin,
@@ -74,13 +73,13 @@ def handle_wannier(args):
 
 def handle_htb(args):
     import re
-    from wanpy import Htb, Cell, Symmetrize_Htb_kspace, get_proj_info, parse_symmetry_inputfile
+    from wanpy import Htb, Cell, Symmetrize_Htb_rspace, Symmetrize_Htb_kspace, get_proj_info, parse_symmetry_inputfile
 
     efermi = args.efermi
     if args.efermi is None:
         efermi = 0.0
         if os.path.exists('vasprun.xml'):
-            efermi = float(re.findall('.\d+.\d+', os.popen('grep efermi vasprun.xml').readline())[0])
+            efermi = float(re.findall(r'.\d+.\d+', os.popen('grep efermi vasprun.xml').readline())[0])
             print('fermi level is {} readed from vasprun.xml'.format(efermi))
 
     # print instructions
@@ -94,32 +93,47 @@ def handle_htb(args):
     htb = Htb(efermi)
 
     T0 = time.time()
-    htb.load_wannier90_dat(seedname=args.seedname, load_wsvec=args.load_wsvec)
+    win = parse_symmetry_inputfile('symmetry.in')
+    htb.load_wannier90_dat(seedname=args.seedname, load_wsvec=args.load_wsvec, wannier_center_def=win.wannier_center_def)
     T1 = time.time()
     print('complete loading hamiltonian from {}, time consuming {:.3f} s'.format(args.seedname, T1-T0))
 
+    symmops = win.symmops
     # symmetric wannier htb
     if args.symmetry:
         print('symmetrizing Wannier TB model')
-        win = parse_symmetry_inputfile('symmetry.in')
-        symmetry_method, ngridR_symmhtb, symmops = \
-            win.symmetry_method, win.ngridR, win.symmops
 
         if win.parse_symmetry == 'auto':
             print('Using magmoms to determine msg, the following msg is found: ')
             cell = Cell()
             cell.load_poscar('POSCAR')
             symmops = cell.get_msg(win.magmoms, win.symprec, info=True)
-        atoms_pos, atoms_orbi = get_proj_info(htb=htb)
-        symmhtb = Symmetrize_Htb_kspace(ngridR=ngridR_symmhtb,
-                                        htb=htb,
-                                        symmops=symmops,
-                                        atoms_pos=atoms_pos,
-                                        atoms_orbi=atoms_orbi,
-                                        soc=htb.worbi.soc
-                                        )
-        symmhtb.run()
-        htb = symmhtb.htb
+        atoms_pos, atoms_orbi = get_proj_info(htb=htb, wannier_center_def=win.wannier_center_def)
+
+
+        if win.symmetric_method[0] == 'k':
+            symmhtb = Symmetrize_Htb_kspace(ngridR=win.ngridR,
+                                            htb=htb,
+                                            symmops=symmops,
+                                            atoms_pos=atoms_pos,
+                                            atoms_orbi=atoms_orbi,
+                                            soc=htb.worbi.soc
+                                            # iprint=iprint,
+                                            )
+            symmhtb.run(tmin=1e-6)
+            htb = symmhtb.htb
+        elif win.symmetric_method[0] == 'r':
+            symmhtb = Symmetrize_Htb_rspace(htb=htb,
+                                            symmops=symmops,
+                                            atoms_pos=atoms_pos,
+                                            atoms_orbi=atoms_orbi,
+                                            soc=htb.worbi.soc,
+                                            # iprint=iprint,
+                                            )
+            if win.rspace_use_ngridR:
+                symmhtb.use_ngridR(win.ngridR)
+            symmhtb.run()
+            htb = symmhtb.htb
 
     print('Fermi level = {} eV'.format(htb.fermi))
 
@@ -130,12 +144,6 @@ def handle_htb(args):
     htb.save_htb()
     T2 = time.time()
     print('h5htb complete, time consuming {:.3f} s'.format(T2-T0))
-
-# def handle_wannier(args):
-#     print(args)
-#
-# def handle_htb(args):
-#     print(args)
 
 def handle_write_dat(args):
     from wanpy import Htb
@@ -151,6 +159,7 @@ def handle_twist_amn(args):
     from wanpy import wannier90_load_wcc, wanpy_check_if_uudd_amn
     from wanpy.interface import W90_amn
 
+    is_uudd_amn, is_udud_amn = None, None
     if not args.skip_check:
         wcc, wccf, wbroaden = wannier90_load_wcc('wannier90.wout', shiftincell=False, check_if_uudd_amn=False)
         is_uudd_amn = wanpy_check_if_uudd_amn(wcc, wbroaden)
@@ -259,6 +268,12 @@ rspace_use_ngridR = F       # use ngridR to resample the TB model, default is Fa
 
 # Choose between manually setting symmops or automatically detecting symmops from magmoms
 parse_symmetry = man        # Options: {man, auto}
+
+# Choose how wannier centers are defined in calculating .amn
+# Options: {poscar, ws}
+#   poscar: the same as poscar. Use this if amn is generated by VASP 5.4.4 (see mlwf.F for details). 
+#   ws: refined in range of [-0.5, 0.5). Use this if amn is generated by VASP 6.5.3 (see mlwf.F for details). 
+wannier_center_def = poscar 
 
 ngridR = 12 12 1            # in kspace method, use a slightly larger value than the original TB model 
 

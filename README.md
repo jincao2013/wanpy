@@ -16,17 +16,17 @@ WanPy requires the following packages to be installed:
 ## Installation
 1. To install WanPy, create a Conda environment with the required packages:
 ```bash
-$ conda create -n wanpy python numpy scipy pandas sympy h5py mpi4py fortio spglib matplotlib
+conda create -n wanpy python numpy scipy pandas sympy h5py mpi4py fortio spglib matplotlib
 ````
 
 2. Uncompress wanpy package in personal computer or clusters: 
 
 ```bash
-$ tar zxvf wanpy.tar.gz
+tar zxvf wanpy.tar.gz
 ```
 or
 ```bash
-$ git clone https://github.com/jincao2013/wanpy.git
+git clone https://github.com/jincao2013/wanpy.git
 ```
 
 3. Setup environment variables: 

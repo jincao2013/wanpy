@@ -23,5 +23,11 @@ import wanpy.interface
 import wanpy.MPI
 import wanpy.response
 
+import warnings
+# This is to ignore SyntaxWarning globally
+# In wanpy, there are some latex note in the docstrings, and they are recognized as
+# invalid escape sequence by python 3.12+.
+warnings.filterwarnings("ignore", category=SyntaxWarning)
+
 # Remove symbols imported for internal use
 # del os

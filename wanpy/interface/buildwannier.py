@@ -40,8 +40,8 @@ class WannierInterpolation(object):
             WAVECAR (needed by WannierInterpolation)
             .eig (needed by WannierInterpolation) .amn .mmn
 
-            N.B. Currently, one need turn off the symmetry in vasp (ISYM=0)
-                 if one need calculate spin matrix.
+            N.B. Currently, one needs turn off the symmetry in vasp (ISYM=0)
+                 for calculating spin matrix.
 
         2). generate .nnkp (we need bk) and .wout (we need wb) file by:
             wannier90.x -pp wannier90.win
@@ -55,43 +55,41 @@ class WannierInterpolation(object):
 
     def __init__(self, fermi=0., poscar_fname='POSCAR', seedname='wannier90',
                  symmetric_htb=False, symmetric_method='kspace', rspace_use_ngridR=False,
-                 ngridR_symmhtb=None, symmops=None,
+                 wannier_center_def=None, ngridR_symmhtb=None, symmops=None,
                  check_if_uudd_amn=True):
+        self.fermi = fermi
         self.poscar_fname = poscar_fname
         self.seedname = seedname
-
-        self.fermi = fermi
+        self.wannier_center_def = wannier_center_def
 
         # POSCAR
         self.cell = Cell()
+        print('reading {}'.format(poscar_fname))
         if os.path.exists(poscar_fname):
             self.cell.load_poscar(fname=poscar_fname)
             self.name = self.cell.name
             self.latt = self.cell.lattice
             self.lattG = self.cell.latticeG
-            print('loaded from {}'.format(poscar_fname))
         else:
             raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), poscar_fname)
 
-        # check if uudd_amn in .wout
-        if check_if_uudd_amn:
-            _, _, _ = wannier90_load_wcc(seedname+'.wout', shiftincell=False, check_if_uudd_amn=check_if_uudd_amn)
-        else:
-            print('please check carefully whether the .amn is in uudd order.')
-
-        # .nnkp .wout
+        # To read bk and wb, this needs .nnkp .wout
         w90_nnkp = W90_nnkp()
         w90_nnkp.load_from_w90(seedname)
-        self.w90_nnkp = w90_nnkp
+        # self.w90_nnkp = w90_nnkp
         self.bk = w90_nnkp.bk
         self.wb = w90_nnkp.wb
-        # self.wcc = w90_nnkp.wcc
-        # self.wccf = w90_nnkp.wccf
+        del w90_nnkp
 
         self.worbi = Worbi()
-        self.worbi.load_from_nnkp(seedname, uudd_amn=True)
-        self.wcc = self.worbi.proj_wcc
-        self.wccf = self.worbi.proj_wccf
+        self.worbi.load_from_nnkp(convert_to_uudd=True, wannier_center_def=wannier_center_def, seedname=seedname)
+        self.soc = self.worbi.soc
+
+        # read wcc and check whether uudd_amn in .wout
+        if self.soc and not check_if_uudd_amn:
+            print('please check carefully whether the .amn is in uudd order.')
+        if not self.soc: check_if_uudd_amn = False
+        self.wcc, self.wccf, wbroaden = wannier90_load_wcc(seedname+'.wout', shiftincell=False, check_if_uudd_amn=check_if_uudd_amn)
 
         # .chk
         w90_chk = W90_chk()
@@ -177,7 +175,7 @@ class WannierInterpolation(object):
 
         if self.symmetric_htb:
             print('symmetrizing Wannier TB model')
-            atoms_pos, atoms_orbi = get_proj_info(htb=self.htb)
+            atoms_pos, atoms_orbi = get_proj_info(htb=self.htb, wannier_center_def=self.wannier_center_def)
 
             if self.symmetric_method[0] == 'k':
                 symmhtb = Symmetrize_Htb_kspace(ngridR=self.ngridR_symmhtb,

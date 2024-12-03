@@ -58,10 +58,12 @@ def init_htb_response_data(MPI, htb, tmin_h=-0.1, tmin_r=-0.1, open_boundary=-1,
 
         htb.setup()
 
+        # this will replace htb.wcc and htb.wccf with exact atomic positions
         if atomic_wcc: htb.use_atomic_wcc()
 
         htb.printer()
-        
+
+        # by setting use_wcc=True will replace diagonal part of r_Ramn[nR//2] with htb.wcc
         nR_hr, nR_r, R_hr, R_r, hr_Rmn, r_Ramn = htb.reduce_htb(tmin=tmin_h, tmin_r=tmin_r, tb=istb, use_wcc=use_wcc, open_boundary=open_boundary)
         nw = htb.nw
 
