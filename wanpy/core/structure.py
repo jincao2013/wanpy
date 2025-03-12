@@ -452,19 +452,19 @@ class Worbi(object):
                     pass
 
         if wannier_center_def.lower() == 'ws':
-            print('\033[0;31muse ws definition of wannier center\033[0m in htb.worib')
+            print('\033[92muse ws definition of wannier center\033[0m in htb.worib')
             # refined in range of [-0.5, 0.5) to keep in line with the wannier center
             # used in calculating amn in VASP 6.4.3.
             self.proj_wccf = np.remainder(self.proj_wccf + 100.5, 1) - 0.5
         elif wannier_center_def.lower() == 'poscar':
-            print('\033[0;31muse poscar definition of wannier center\033[0m in htb.worib')
+            print('\033[92muse poscar definition of wannier center\033[0m in htb.worib')
             # proj_wccf origins from wannier_setup, and are in line with POSCAR,
             # if wannier_center_def = poscar, do nothing here.
             pass
         else:
             WanpyInputError('\033[0;31mwannier_center_def should be poscar or ws \033[0m')
         self.proj_wcc = (self.latt @ self.proj_wccf.T).T
-
+    
     def save_h5(self, fname='worbi.h5'):
         with h5py.File(fname, "a") as f:
             f.create_group('worbi')
