@@ -166,7 +166,3 @@ symprec = 1e-5
 ```
 
 
-
-## License
-
-WanPy is released under the GNU General Public License. See LICENSE for details.

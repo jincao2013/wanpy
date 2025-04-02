@@ -590,13 +590,15 @@ def get_corep(symmop, latt, atoms_pos, atoms_orbi, soc):
         ion_car_rot = (rot @ ion_car.T).T + tau_car
 
         ion_rot = (LA.inv(latt) @ ion_car_rot.T).T
-        # ion_rot = np.remainder(ion_rot + 1e-5, 1.0)  # move ion at 1- to 0+ # removed at v0.15.2
-        ion_rot = np.remainder(ion_rot, 1.0)  # move ion_rot at [0, 1) # added at v0.15.2
+        ion_rot = np.remainder(ion_rot + 1e-5, 1.0)  # move ion at 1- to 0+ # removed at v0.15.2
+        # ion_rot = np.remainder(ion_rot, 1.0)  # move ion_rot at [0, 1) # added at v0.15.2
         ion_car_rot = (latt @ ion_rot.T).T
 
         dismat = distance_matrix(ion_car, ion_car_rot)
         rep_pos_i = np.array(dismat < 0.01, dtype='float')
 
+        # print('ion:', ion)
+        # print('ion_rot:', ion_rot)
         assert LA.matrix_rank(rep_pos_i) == ion.shape[0]  # check if a valid symmop
 
         # get op

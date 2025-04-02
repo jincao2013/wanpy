@@ -41,9 +41,9 @@ doc/
 examples/
 test/
 # projects/
-wanpy/del
 wanpy/dev
 scripts/dfttools
+scripts/update_public_wanpy.sh
 _del/
 *__del.py
 *__dev.py

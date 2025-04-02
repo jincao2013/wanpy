@@ -54,7 +54,8 @@ def handle_wannier(args):
             print('Using magmoms to determine msg, the following msg is found: ')
             cell = Cell()
             cell.load_poscar('POSCAR')
-            symmops = cell.get_msg(win.magmoms, win.symprec, info=True)
+            symmops = cell.get_msg(win.magmoms, win.symprec,
+                                   wannier_center_def=win.wannier_center_def, info=True)
 
     wanrun = WannierInterpolation(efermi, seedname=args.seedname,
                                   symmetric_htb=args.symmetry, symmetric_method=win.symmetric_method,

@@ -259,14 +259,26 @@ class Cell(object):
         self.spec = hdf5_read_dataset(cell, 'spec', default=[])
         f.close()
 
-    def get_spglib_cell(self, magmoms=None):
+    def get_spglib_cell(self, magmoms=None, wannier_center_def='ws'):
+        if wannier_center_def.lower() == 'ws':
+            # refined in range of [-0.5, 0.5) to keep in line with the wannier center
+            # used in calculating amn in VASP 6.4.3.
+            ions = np.remainder(self.ions + 100.5, 1) - 0.5
+        elif wannier_center_def.lower() == 'poscar':
+            # proj_wccf origins from wannier_setup, and are in line with POSCAR,
+            # if wannier_center_def = poscar, do nothing here.
+            ions = self.ions
+        else:
+            WanpyInputError('wannier_center_def should be poscar or ws')
+
         if magmoms is None:
             magmoms = np.zeros_like(self.ions)
-        cell = (self.lattice.T, self.ions, [periodic_table.get(i) for i in self.spec], magmoms)
+
+        cell = (self.lattice.T, ions, [periodic_table.get(i) for i in self.spec], magmoms)
         return cell
 
-    def get_msg(self, magmoms, symprec=1e-5, info=False):
-        cell_mag = self.get_spglib_cell(magmoms)
+    def get_msg(self, magmoms, symprec=1e-5, wannier_center_def='ws', info=False):
+        cell_mag = self.get_spglib_cell(magmoms, wannier_center_def)
         latt = self.lattice
 
         info_mag = spglib.get_magnetic_symmetry(cell_mag, symprec=symprec, angle_tolerance=-1.0, mag_symprec=-1.0)
@@ -285,7 +297,7 @@ class Cell(object):
             [get_ntheta_from_rotmatrix(int(TR[i]), tau[i], latt @ rot[i] @ LA.inv(latt), atol=symprec)
              for i in range(n_operations)
         ])
-
+        
         if info:
             print('\n\nMagnetic space group for magnetic structure (symprec:{:10.7f} Angstrom)'.format(symprec))
             print('-' * 100)
