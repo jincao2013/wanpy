@@ -9,8 +9,23 @@
 #
 # https://github.com/jincao2013/wanpy
 
-# import os
-from .env import __author__, __email__, __version__, ROOT_WDIR, PYGUI
+__author__ = 'Jin Cao'
+__email__ = "caojin.phy@gmail.com"
+__version__ = "0.15.2"
+
+import os
+# from .env import __author__, __email__, __version__, ROOT_WDIR, PYGUI
+# from .env import ROOT_WDIR, PYGUI
+
+ROOT_WDIR = r''
+PYGUI = False
+
+if os.getenv('WANPY_ROOT_DIR') is not None:
+    ROOT_WDIR = os.getenv('WANPY_ROOT_DIR')
+
+if os.getenv('PYGUI') in ['True', '1']:
+    PYGUI = True
+
 from .core.bz import fermi_dirac_func, delta_func
 from .core.greenfunc import self_energy
 from .core.mesh import make_ws_gridR, make_mesh, make_kpath, kmold
@@ -30,4 +45,4 @@ import warnings
 warnings.filterwarnings("ignore", category=SyntaxWarning)
 
 # Remove symbols imported for internal use
-# del os
+del os

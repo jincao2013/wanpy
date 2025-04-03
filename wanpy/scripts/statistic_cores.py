@@ -3,15 +3,12 @@
 
 __date__ = "Jan. 3, 2019"
 
-import os
 import sys
 import re
 import datetime
 import numpy as np
-sys.path.append(os.environ.get('PYTHONPATH'))
 
-
-if __name__ == "__main__":
+def main():
     argv = sys.argv[1:]
     fname = argv[0]
     print('load file from', fname)
@@ -56,3 +53,6 @@ if __name__ == "__main__":
     print(' Predicted time in total: {:4.1f} h'.format(np.max(seconds_in_total)/3600))
     print('                Time now: {}'.format(t1.strftime('%y-%m-%d %H:%M:%S')))
     print('   Predicted finish time: {}'.format(t2.strftime('%y-%m-%d %H:%M:%S')))
+
+if __name__ == "__main__":
+    main()

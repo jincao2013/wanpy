@@ -1,22 +1,23 @@
 # WanPy: A Wannier Tight-Binding Model Based Numerical Package
 
 ## Requirements
-WanPy requires the following packages to be installed:
 - numpy
 - scipy
-- pandas
 - sympy
-- h5py
+- pandas
 - mpi4py
+- h5py
 - fortio
-- spglib
+- hatch
+- spglib>=2.3.0
 - matplotlib (optional)
-- phonopy (optional)
+- phonopy (optional; required by findmsg)
+- pymatgen (optional; required by wpyplotband)
 
 ## Installation
-1. To install WanPy, create a Conda environment with the required packages:
+1. Create a Conda environment with the required packages:
 ```bash
-conda create -n wanpy python numpy scipy pandas sympy h5py mpi4py fortio spglib matplotlib
+conda create -n wanpy numpy scipy pandas sympy h5py mpi4py fortio hatch spglib matplotlib
 ````
 
 2. Uncompress wanpy package in personal computer or clusters: 
@@ -164,5 +165,4 @@ symprec = 1e-5
   1   1    180    0   0   1   0     0     0   # Tc2z
 /
 ```
-
 

@@ -9,18 +9,13 @@
 #
 # https://github.com/jincao2013/wanpy
 
-import os
+# import os
 
-__author__ = 'Jin Cao'
-__email__ = "caojin.phy@gmail.com"
-__version__ = "0.15.2"
-
-
-ROOT_WDIR = r''
-PYGUI = False
-
-if os.getenv('WANPY_ROOT_DIR') is not None:
-    ROOT_WDIR = os.getenv('WANPY_ROOT_DIR')
-
-if os.getenv('PYGUI') in ['True', '1']:
-    PYGUI = True
+# ROOT_WDIR = r''
+# PYGUI = False
+#
+# if os.getenv('WANPY_ROOT_DIR') is not None:
+#     ROOT_WDIR = os.getenv('WANPY_ROOT_DIR')
+#
+# if os.getenv('PYGUI') in ['True', '1']:
+#     PYGUI = True

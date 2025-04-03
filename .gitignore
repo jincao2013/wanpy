@@ -3,6 +3,13 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Pycharm
+.idea/
+
+# macOS
+.DS_Store
+*/.DS_Store
+
 # C extensions
 *.so
 
@@ -14,8 +21,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+#lib/
+#lib64/
 parts/
 sdist/
 var/
@@ -24,26 +31,10 @@ share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST.in
-
 *.log
 
-# Pycharm 
-.idea/
-
-# macOS
-.DS_Store
-*/.DS_Store
-
-# custom
-pyproject.toml
-doc/
+# WanPy
+dev/
+dfttools/
 examples/
 test/
-# projects/
-wanpy/dev
-scripts/dfttools
-scripts/update_public_wanpy.sh
-_del/
-*__del.py
-*__dev.py

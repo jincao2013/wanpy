@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "wanpy"
+dynamic = ["version"]
+description = "A Wannier Tight-Binding Model Based Numerical Package"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Jin Cao", email = "caojin.phy@gmail.com" }
+]
+requires-python = ">=3.6"
+dependencies = [
+    "numpy", "scipy", "sympy", "pandas", "mpi4py", "h5py", "fortio", "hatch",
+    "spglib>=2.3.0", "matplotlib"
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Physics"
+]
+
+[project.scripts]
+wanpy = "wanpy.scripts.wanpy:main"
+wanpy-postinstall = "wanpy.scripts.postinstall:main"
+#wpyplotband = "wanpy.scripts.wpyplotband:main" # there is no main function
+statistic-cores = "wanpy.scripts.statistic_cores:main"
+#findmsg = "wanpy.scripts.findmsg:main" # there is no main function
+
+[tool.hatch.version]
+path = "wanpy/__init__.py"
+
+#[tool.hatch.build.targets]
+#ignore-vcs = true
+
+[tool.hatch.build]
+include = [
+    "wanpy/**",
+    "wanpyProjects/**",
+]
+exclude = [
+    "**/__pycache__/",
+    "**/*.py[cod]",
+    "**/*$py.class",
+    "**/.DS_Store",
+    "**/.idea/**/*",
+]
