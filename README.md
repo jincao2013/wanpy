@@ -15,11 +15,15 @@
 - pymatgen (optional; required by wpyplotband)
 
 ## Installation
-Create a Conda environment and install wanpy using pip:
+Create a Conda environment and install wanpy:
 ```bash
 conda create -n wanpy numpy scipy pandas sympy h5py mpi4py fortio hatch spglib matplotlib
 conda activate wanpy 
 pip install wanpy 
+````
+create a symbolic link for wanpyProjects at `~/opt/wanpyProjects`:
+```bash
+wanpy-postinstall
 ````
 (Optional) Configure Environment Variables
 If you are installing wanpy on a personal computer, you may want to set environment variables for convenience:
