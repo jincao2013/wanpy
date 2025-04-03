@@ -8,9 +8,7 @@ dynamic = ["version"]
 description = "A Wannier Tight-Binding Model Based Numerical Package"
 readme = "README.md"
 license = { file = "LICENSE" }
-authors = [
-    { name = "Jin Cao", email = "caojin.phy@gmail.com" }
-]
+authors = [{ name = "Jin Cao", email = "caojin.phy@gmail.com" }]
 requires-python = ">=3.6"
 dependencies = [
     "numpy", "scipy", "sympy", "pandas", "mpi4py", "h5py", "fortio", "hatch",

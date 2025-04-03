@@ -15,35 +15,17 @@
 - pymatgen (optional; required by wpyplotband)
 
 ## Installation
-1. Create a Conda environment with the required packages:
+Create a Conda environment and install wanpy using pip:
 ```bash
 conda create -n wanpy numpy scipy pandas sympy h5py mpi4py fortio hatch spglib matplotlib
+conda activate wanpy 
+pip install wanpy 
 ````
-
-2. Uncompress wanpy package in personal computer or clusters: 
-
+(Optional) Configure Environment Variables
+If you are installing wanpy on a personal computer, you may want to set environment variables for convenience:
 ```bash
-tar zxvf wanpy.tar.gz
-```
-or
-```bash
-git clone https://github.com/jincao2013/wanpy.git
-```
-
-3. Setup environment variables: 
-
-For debug in personal computer:
-```bash
-export PYTHONPATH="path_of_wanpy:$PYTHONPATH"
-export PATH="path_of_wanpy/scripts:$PATH"
-export WANPY_ROOT_DIR="your_work_dir"
-export PYGUI="True"
-```
-
-For deployment in clusters:
-```bash
-export PYTHONPATH="path_of_wanpy:$PYTHONPATH"
-export PATH="path_of_wanpy/scripts:$PATH"
+export WANPY_ROOT_DIR="your_work_dir"  # Set a default working directory for WanPy  
+export PYGUI="True"  # Enable GUI features if applicable  
 ```
 
 ## Get start
