@@ -11,7 +11,7 @@
 
 __author__ = 'Jin Cao'
 __email__ = "caojin.phy@gmail.com"
-__version__ = "0.16.0"
+__version__ = "0.16.1"
 
 import os
 # from .env import __author__, __email__, __version__, ROOT_WDIR, PYGUI
