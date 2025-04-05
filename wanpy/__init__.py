@@ -1,4 +1,4 @@
-# Copyright (C) 2023 Jin Cao
+# Copyright (C) 2020 Jin Cao
 #
 # This file is distributed as part of the wanpy code and
 # under the terms of the GNU General Public License. See the
@@ -11,7 +11,7 @@
 
 __author__ = 'Jin Cao'
 __email__ = "caojin.phy@gmail.com"
-__version__ = "0.15.2"
+__version__ = "0.16.0"
 
 import os
 # from .env import __author__, __email__, __version__, ROOT_WDIR, PYGUI

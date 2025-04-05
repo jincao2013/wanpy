@@ -1,4 +1,4 @@
-# Copyright (C) 2023 Jin Cao
+# Copyright (C) 2020 Jin Cao
 #
 # This file is distributed as part of the wanpy code and
 # under the terms of the GNU General Public License. See the
@@ -297,7 +297,7 @@ class Cell(object):
             [get_ntheta_from_rotmatrix(int(TR[i]), tau[i], latt @ rot[i] @ LA.inv(latt), atol=symprec)
              for i in range(n_operations)
         ])
-        
+
         if info:
             print('\n\nMagnetic space group for magnetic structure (symprec:{:10.7f} Angstrom)'.format(symprec))
             print('-' * 100)

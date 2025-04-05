@@ -1,6 +1,16 @@
 #!/usr/bin/env python
-import sys
-import os
+
+# Copyright (C) 2020 Jin Cao
+#
+# This file is distributed as part of the wanpy code and
+# under the terms of the GNU General Public License. See the
+# file LICENSE in the root directory of the wanpy
+# distribution, or http://www.gnu.org/licenses/gpl-3.0.txt
+#
+# The wanpy code is hosted on GitHub:
+#
+# https://github.com/jincao2013/wanpy
+
 import argparse
 import numpy as np
 import numpy.linalg as LA
@@ -205,8 +215,7 @@ def print_msg(cell_mag, latt, symprec=1e-5):
             print('')
     print('-' * 100)
 
-
-if __name__ == "__main__":
+def main():
     description = 'Find magnetic point group from POSCAR and magmoms (optional) files with a given threshold.'
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument('poscar', type=str, help='Input POSCAR file (e.g., POSCAR)')
@@ -270,6 +279,8 @@ if __name__ == "__main__":
         print_msg(cell_mag, latt, symprec=symprec)
         print('\n* TR = 0 (without TR) or TR = 1 (with TR)')
 
+if __name__ == "__main__":
+    main()
 
 # ''' debug '''
 # if __name__ == "__main__":

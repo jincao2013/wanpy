@@ -1,6 +1,7 @@
 # WanPy: A Wannier Tight-Binding Model Based Numerical Package
 
 ## Requirements
+- python>=3.11
 - numpy
 - scipy
 - sympy
@@ -21,6 +22,11 @@ conda create -n wanpy numpy scipy pandas sympy h5py mpi4py fortio hatch spglib m
 conda activate wanpy 
 pip install wanpy 
 ````
+Note for compatibility with srun, it is recommended to use MPICH:
+```bash
+conda install -c conda-forge mpi4py==3.1.4 mpich
+```
+
 create a symbolic link for wanpyProjects at `~/opt/wanpyProjects`:
 ```bash
 wanpy-postinstall

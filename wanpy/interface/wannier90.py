@@ -1,4 +1,4 @@
-# Copyright (C) 2023 Jin Cao
+# Copyright (C) 2020 Jin Cao
 #
 # This file is distributed as part of the wanpy code and
 # under the terms of the GNU General Public License. See the
@@ -15,7 +15,6 @@ import os
 import sys
 # import getpass
 import scipy.spatial
-sys.path.append(os.environ.get('PYTHONPATH'))
 import re
 import numpy as np
 import numpy.linalg as LA

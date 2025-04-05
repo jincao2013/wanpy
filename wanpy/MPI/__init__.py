@@ -1,4 +1,4 @@
-# Copyright (C) 2023 Jin Cao
+# Copyright (C) 2020 Jin Cao
 #
 # This file is distributed as part of the wanpy code and
 # under the terms of the GNU General Public License. See the
@@ -11,3 +11,4 @@
 
 from .init_data import init_kmesh, init_htb_response_data
 from .MPI import MPI_Reduce, MPI_Gather, get_kgroups, parprint
+from .config import Config

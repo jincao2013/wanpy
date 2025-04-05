@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import sys
+
 # Copyright (C) 2020 Jin Cao
 #
 # This file is distributed as part of the wanpy code and
