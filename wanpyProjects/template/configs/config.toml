@@ -1,0 +1,58 @@
+# Job =
+#   * dos
+job = "dos"
+
+[system]
+htb_dir = "..."
+htb_fname = 'htb.h5'
+pt_symmetric = false
+
+[tensor]
+tensor_indices = [
+    [0, 0, 2], [1, 1, 2], [0, 0, 0]
+]
+
+[dostags]
+#ne = 101
+#emin = -0.1
+#emax = 0.1
+omega = -0.1
+#ewidth = 0.005
+
+[fermi_surface]
+ngate = 51
+gateMIN = -0.3
+gateMAX = 0.3
+
+[thermal]
+temperature = [50, 100, 150]
+tau = 0.01 # in unit of ps, i.e., 1e-12s
+
+[htb]
+tmin_h = -1e-6
+tmin_r = -1e-6
+open_boundary = -1
+istb = true
+use_wcc = true
+atomic_wcc = true
+
+[magnetic]
+mag_sublatt_def = [
+    [0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+]
+
+[BZ]
+nkmesh = [10, 10, 1]
+#nkmesh = [1000, 1000, 1]
+#kcube = [
+#    [1.0, 0.0, 0.0],
+#    [0.0, 1.0, 0.0],
+#    [0.0, 0.0, 0.5]
+#]
+#kmesh_shift = [0, 0, 0]
+#random_k = false
+#centersym = false
+
+[artificial]
+ewidth_imag = 1e-6

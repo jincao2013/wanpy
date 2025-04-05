@@ -1,6 +1,9 @@
-job = "band"
+# Job =
+#   * dos
+job = "dos"
 
 [system]
+htb_dir = "/Users/jincao/scidata/htblib"
 htb_fname = "htb.CrSb.soc.symmr.h5"
 pt_symmetric = false
 

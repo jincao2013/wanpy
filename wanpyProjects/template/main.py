@@ -1,4 +1,4 @@
-# Copyright (C) 2025 Jin Cao
+# Copyright (C) 2020 Jin Cao
 #
 # This file is distributed as part of the wanpy code and
 # under the terms of the GNU General Public License. See the
@@ -15,97 +15,41 @@ import warnings
 warnings.filterwarnings("ignore", category=SyntaxWarning)
 import time
 import os
+import argparse
 import numpy as np
 from numpy import linalg as LA
 from mpi4py import MPI
 import wanpy as wp
 import wanpy.response as res
+from wanpy.MPI import Config
 from wanpy.MPI import MPI_Reduce, MPI_Gather, init_kmesh, init_htb_response_data
-from wanpyProjects import lib as libwpy
-from wanpyProjects.lib.plot import *
-
-COMM = MPI.COMM_WORLD
-MPI_rank = COMM.Get_rank()
-MPI_ncore = COMM.Get_size()
-MPI_main = not MPI_rank
+from wanpyProjects.template.lib import libwtb
+from wanpyProjects.template.lib.plot import *
 
 if wp.PYGUI:
     import matplotlib.pyplot as plt
 
 if wp.PYGUI:
-    wdir = os.path.join(wp.ROOT_WDIR, r'...')
-    input_dir = os.path.join(wp.ROOT_WDIR, r'...')
+    wdir = os.path.join(wp.ROOT_WDIR, r'templateProject')
+    config_dir = os.path.join(wp.ROOT_WDIR, r'templateProject/configs')
+    config_path = os.path.join(config_dir, "config.toml")
 else:
     wdir = os.getcwd()
-    input_dir = r'./'
+    # load config_path from command-line argument
+    parser = argparse.ArgumentParser(description="Run simulation")
+    parser.add_argument("-t", "--toml", required=True, help="Path to config.toml")
+    args = parser.parse_args()
+    config_path = args.toml
 
-'''
-  * Input
-'''
 if __name__ == '__main__':
-    '''
-      * Job = 
-      ** band
-    '''
-    Job = 'band'
-    setup = True
+    # Load config.toml
+    cf = Config(MPI)
+    cf.load_config(config_path)
 
-    '''
-      * System
-    '''
-    htb_fname = r'htb.soc.symmr.h5'
-    pt_symmetric = False
-
-    os.chdir(input_dir)
+    # Initialize htb object and loads htb data from .h5 for main MPI rank
     htb = wp.Htb()
-    if MPI_main: htb.load_h5(htb_fname)
+    if cf.MPI_main: htb.load_h5(os.path.join(cf.htb_dir, cf.htb_fname))
     os.chdir(wdir)
-
-    '''
-      * DOS tags
-    '''
-    # ne = 101
-    # emin = -0.3
-    # emax = 0.3  # 0.6, 0.5, 0.3
-    # ee = np.linspace(emin, emax, ne)
-
-    # ewidth = 0.005  # 5meV or 10meV
-
-    omega = -0.1
-
-    '''
-      * Fermi surface tags
-    '''
-    ngate = 101
-    gateMIN = -0.3
-    gateMAX = 0.3
-    gate = np.linspace(gateMIN, gateMAX, ngate)
-
-    temperature = np.array([20, 50, 100])
-    ntemperature = temperature.shape[0]
-
-    ewidth_imag = 1e-6
-    tau = 0.01  # in unit of ps, i.e., 1e-12s
-
-    '''
-      * htb tags
-    '''
-    tmin_h = -1e-6
-    tmin_r = -1e-6
-    open_boundary = -1
-    istb = True
-    use_wcc = True
-    atomic_wcc = True
-
-    '''
-      * BZ tags
-    '''
-    nkmesh = np.array([24, 24, 1])
-    # nkmesh = np.array([1920, 1920, 1])
-    kcube = np.identity(3)
-    kmesh_shift = np.array([0, 0, 0])
-    random_k = False
-    centersym = False
 
     ''' 
       * K path tags
@@ -113,19 +57,19 @@ if __name__ == '__main__':
     nk_path = 101
 
     G = np.array([0.0, 0.0, 0.0])
-    M = np.array([0.5, 0.0, 0.0])
-    K = np.array([1/3, 1/3, 0.0])
+    X = np.array([0.5, 0.0, 0.0])
+    Y = np.array([0.0, 0.5, 0.0])
+    M = np.array([0.5, 0.5, 0.0])
 
-    kpath_HSP = np.array([G, M, K, G])
-    xlabel = ['G', 'M', 'K', 'G']
-
+    kpath_HSP = np.array([G, X, M, Y, G])
+    xlabel = ['G', 'X', 'M', 'Y', 'G']
 
 '''
   * MPI calculator
 '''
 @MPI_Gather(MPI, iterprint=500, dtype='float64')
 def cal_Fermi_surface(k, dim):
-    return libwpy.cal_Fermi_surface(htb, k, omega, eta=ewidth_imag)
+    return libwtb.cal_Fermi_surface(htb, k, cf.omega, eta=cf.ewidth_imag)
 
 '''
   * Band Calculators
@@ -133,53 +77,82 @@ def cal_Fermi_surface(k, dim):
 def cal_band(htb, kpath):
     nk = kpath.shape[0]
     bandE = np.zeros([nk, htb.nw], dtype='float64')
-    # bandE = np.zeros([nk, 24], dtype='float64')
     for i, k in zip(range(nk), kpath):
         res.printk(i, nk, k)
         bandE[i] = res.cal_band(htb, k, tbgauge=False, use_ws_distance=False)
-        # bandE[i] = libwtb.debug_cal_band_symm(htb, k)
     return bandE
 
 '''
   * main
 '''
-if __name__ == '__main__' and setup == True:
+if __name__ == '__main__' and cf.job is not None:
     T0 = time.time()
 
-    if MPI_main:
-        print('Running on   {} total cores'.format(MPI_ncore))
+    if cf.MPI_main:
+        print('Running on   {} total cores'.format(cf.MPI_ncore))
         print('WANPY version: {}'.format(wp.__version__))
         print('Author: {}'.format(wp.__author__))
         print()
 
-    htb = init_htb_response_data(MPI, htb, tmin_h=tmin_h, tmin_r=tmin_r, open_boundary=open_boundary, istb=istb, use_wcc=use_wcc, atomic_wcc=atomic_wcc)
-    kmesh = init_kmesh(MPI, nkmesh, random_k=random_k, kcube=kcube, kmesh_shift=kmesh_shift)
+    cf.print_config()
+    htb = init_htb_response_data(MPI, htb, tmin_h=cf.tmin_h, tmin_r=cf.tmin_r, open_boundary=cf.open_boundary, istb=cf.istb, use_wcc=cf.use_wcc, atomic_wcc=cf.atomic_wcc)
+    kmesh = init_kmesh(MPI, cf.nkmesh, random_k=cf.random_k, kcube=cf.kcube, kmesh_shift=cf.kmesh_shift)
 
-    NK = kmesh.shape[0] if MPI_main else None
-    kmesh_car = (htb.lattG @ kmesh.T).T if MPI_main else None
+    NK = kmesh.shape[0] if cf.MPI_main else None
+    kmesh_car = (htb.lattG @ kmesh.T).T if cf.MPI_main else None
 
     T1 = time.time()
-    if MPI_main:
-        print('{} job start at {}. unix time: {}'.format(Job, time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()), time.time()))
+    if cf.MPI_main:
+        print('{} job start at {}. unix time: {}'.format(cf.job, time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()), time.time()))
 
-if __name__ == '__main__' and Job == 'band':
+if __name__ == '__main__' and cf.job == 'band':
     os.chdir(wdir)
-
     kpath = wp.make_kpath(kpath_HSP, nk_path - 1)
     kpath_car = LA.multi_dot([htb.lattG, kpath.T]).T
-
     bandE = cal_band(htb, kpath)
-
     if wp.PYGUI:
-        plot_band(kpath_car, bandE, xlabel, eemin=-1, eemax=1, figsize=[3.3, 3])
+        plot_band(kpath_car, bandE, xlabel, eemin=-0.3, eemax=0.3)
+
+if __name__ == '__main__' and cf.job == 'dos':
+    dim = [1]
+    savefname = r'dos.npz'
+
+    RS = cal_Fermi_surface(kmesh, dim)
+
+    if cf.MPI_main:
+        dos = RS
+        kmesh_car = (htb.lattG @ kmesh.T).T
+        np.savez_compressed(savefname, omega=cf.omega, ewidth_imag=cf.ewidth_imag, lattG=htb.lattG,
+                            nkmesh=cf.nkmesh, kmesh=kmesh, dos=dos
+                            )
+
+    if cf.MPI_main and wp.PYGUI:
+        npdata = np.load(r'dos.npz')
+        nkmesh = npdata['nkmesh']
+        kmesh = npdata['kmesh']
+        lattG = npdata['lattG']
+        dos = npdata['dos']
+        del npdata
+
+        kmesh_car = (lattG @ kmesh.T).T
+        # plot_contour(dos, kmesh_car, XX=None, YY=None, vmin=0, vmax=dos.max(), vmin_show=0, vmax_show=dos.max(), plotref=False, cmap='Blues', figsize=[4,3.6])
+        plt.xlabel(r'$k_x~(\AA^{-1})$')
+        plt.ylabel(r'$k_y~(\AA^{-1})$')
+        plt.axis([-1.4, 1.4, -1.4, 1.4])
+        plt.xticks(np.linspace(-1.2, 1.2, 3))
+        plt.yticks(np.linspace(-1.2, 1.2, 3))
+        plt.tight_layout()
+
+if __name__ == '__main__' and cf.job == 'debug':
+    pass
 
 '''
   * End 
 '''
-if __name__ == '__main__' and setup == True:
-    if MPI_rank == 0:
+if __name__ == '__main__' and cf.job is not None:
+    if cf.MPI_main:
         T2 = time.time()
         print('Time consuming in total {:.3f}s ({:.3f}h).'.format(T2 - T0, (T2 - T0) / 3600))
-        print('Time consuming {:.2f}ms on each of {} kpoints per core.'.format(1000 * MPI_ncore * (T2 - T1) / NK, NK))
+        print('Time consuming {:.2f}ms on each of {} kpoints per core.'.format(1000 * cf.MPI_ncore * (T2 - T1) / NK, NK))
     else:
         pass

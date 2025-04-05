@@ -25,7 +25,7 @@ class Config:
         self.job = None
 
         # System
-        self.htb = None
+        self.htb_dir = None
         self.htb_fname = None
         self.pt_symmetric = None
 
@@ -88,6 +88,7 @@ class Config:
 
         # System
         system = toml_dict.get("system", {})
+        self.htb_dir = system.get("htb_dir")
         self.htb_fname = system.get("htb_fname")
         self.pt_symmetric = system.get("pt_symmetric")
 
@@ -117,7 +118,7 @@ class Config:
 
         # Thermal
         thermal = toml_dict.get("thermal", {})
-        self.temperature = np.array(thermal.get("temperature"))
+        self.temperature = np.array(thermal.get("temperature"), dtype="float64")
         if self.temperature is not None:
             self.ntemperature = self.temperature.shape[0]
         self.tau = thermal.get("tau")
@@ -139,9 +140,9 @@ class Config:
 
         # BZ
         BZ = toml_dict.get("BZ", {})
-        self.nkmesh = np.array(BZ.get("nkmesh"))
-        self.kcube = np.array(BZ.get("kcube", np.identity(3).tolist()))
-        self.kmesh_shift = np.array(BZ.get("kmesh_shift", [0, 0, 0]))
+        self.nkmesh = np.array(BZ.get("nkmesh"), dtype="int64")
+        self.kcube = np.array(BZ.get("kcube", np.identity(3).tolist()), dtype="float64")
+        self.kmesh_shift = np.array(BZ.get("kmesh_shift", [0, 0, 0]), dtype="float64")
         self.random_k = BZ.get("random_k", False)
         self.centersym = BZ.get("centersym", False)
 
@@ -173,6 +174,7 @@ class Config:
 
         # System
         print("\n[System]")
+        print(f"  htb_dir: {self.htb_dir}")
         print(f"  htb_fname: {self.htb_fname}")
         print(f"  pt_symmetric: {self.pt_symmetric}")
 
