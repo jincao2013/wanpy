@@ -11,8 +11,6 @@
 
 __date__ = "Mar. 31, 2025"
 
-import warnings
-warnings.filterwarnings("ignore", category=SyntaxWarning)
 import time
 import os
 import argparse

@@ -1,3 +1,19 @@
+# ==========================================================================
+#
+#  Example Configuration File (config.toml)
+#  ⚠️ Note: This is a sample config file.
+#  Please review and update before deploying to production.
+#
+#  🚀 Deployment Configuration File
+#
+#  This is the production-ready version of config.toml.
+#
+#  🔧 How to execute with MPI:
+#
+#      mpirun -n <num_processes> python -u <path_to_main.py> -t <path_to_config.toml>
+#
+# ==========================================================================
+
 # Job =
 #   * dos
 job = "dos"

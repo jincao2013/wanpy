@@ -14,8 +14,6 @@ __email__ = "caojin.phy@gmail.com"
 __version__ = "0.16.1"
 
 import os
-# from .env import __author__, __email__, __version__, ROOT_WDIR, PYGUI
-# from .env import ROOT_WDIR, PYGUI
 
 ROOT_WDIR = r''
 PYGUI = False
@@ -38,11 +36,11 @@ import wanpy.interface
 import wanpy.MPI
 import wanpy.response
 
-import warnings
+# import warnings
 # This is to ignore SyntaxWarning globally
 # In wanpy, there are some latex note in the docstrings, and they are recognized as
 # invalid escape sequence by python 3.12+.
-warnings.filterwarnings("ignore", category=SyntaxWarning)
+# warnings.filterwarnings("ignore", category=SyntaxWarning)
 
 # Remove symbols imported for internal use
 del os
