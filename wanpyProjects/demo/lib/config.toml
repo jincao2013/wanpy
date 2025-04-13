@@ -52,11 +52,11 @@ istb = true
 use_wcc = true
 atomic_wcc = true
 
-[magnetic]
-mag_sublatt_def = [
-    [0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-]
+#[magnetic]
+#mag_sublatt_def = [
+#    [0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+#    [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+#]
 
 [BZ]
 nkmesh = [10, 10, 1]
@@ -72,3 +72,6 @@ nkmesh = [10, 10, 1]
 
 [artificial]
 ewidth_imag = 1e-6
+
+[output]
+iterprint = 500

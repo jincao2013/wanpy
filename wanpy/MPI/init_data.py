@@ -28,7 +28,8 @@ def init_kmesh(MPI, nkmesh, random_k=False, type='continuous', centersym=False,
                ):
     COMM = MPI.COMM_WORLD
     MPI_rank = COMM.Get_rank()
-    if MPI_rank == 0:
+    MPI_main = not MPI_rank
+    if MPI_main:
         kmesh = make_mesh(nkmesh, basis=kcube, diagbasis=diagbasis, mesh_shift=kmesh_shift,
                           mesh_dtype=mesh_dtype, mesh_type=type, centersym=centersym,
                           info=True)
@@ -44,6 +45,7 @@ def init_htb_response_data(MPI, htb, tmin_h=-0.1, tmin_r=-0.1, open_boundary=-1,
     COMM = MPI.COMM_WORLD
     MPI_rank = COMM.Get_rank()
     MPI_ncore = COMM.Get_size()
+    MPI_main = not MPI_rank
     '''
       * bcast 
         nw, fermi, cell
@@ -51,33 +53,34 @@ def init_htb_response_data(MPI, htb, tmin_h=-0.1, tmin_r=-0.1, open_boundary=-1,
         Rc_hr, Rc_r
         kps
     ''' #
-    if MPI_rank == 0:
-
-        # htb = Htb()
-        # htb.load_htb(htb_fname)
-
+    if MPI_main:
         htb.setup()
 
         # this will replace htb.wcc and htb.wccf with exact atomic positions
-        if atomic_wcc: htb.use_atomic_wcc()
+        if atomic_wcc:
+            htb.use_atomic_wcc()
 
         htb.printer()
 
         # by setting use_wcc=True will replace diagonal part of r_Ramn[nR//2] with htb.wcc
-        nR_hr, nR_r, R_hr, R_r, hr_Rmn, r_Ramn = htb.reduce_htb(tmin=tmin_h, tmin_r=tmin_r, tb=istb, use_wcc=use_wcc, open_boundary=open_boundary)
+        nR_hr, nR_r, R_hr, R_r, hr_Rmn, r_Ramn = htb.reduce_htb(
+            tmin=tmin_h,
+            tmin_r=tmin_r,
+            tb=istb,
+            use_wcc=use_wcc,
+            open_boundary=open_boundary
+        )
         nw = htb.nw
 
-        Rc_hr = np.zeros([nR_hr, 3], dtype='float64')
-        Rc_r = np.zeros([nR_r, 3], dtype='float64')
-        Rc_hr += LA.multi_dot([htb.cell.lattice, R_hr.T]).T
-        Rc_r += LA.multi_dot([htb.cell.lattice, R_r.T]).T
+        Rc_hr = (htb.latt @ R_hr.T).T
+        Rc_r = (htb.latt @ R_r.T).T
 
-        print('')
-        print('                               -----------------------')
-        print('                               Reduced R Grid (hr_Rmn)')
-        print('                               -----------------------')
-        print('')
-        htb.print_RGrid(R_hr, np.ones(R_hr.shape[0]))
+        # print('')
+        # print('                               -----------------------')
+        # print('                               Reduced R Grid (hr_Rmn)')
+        # print('                               -----------------------')
+        # print('')
+        # htb.print_RGrid(R_hr, np.ones(R_hr.shape[0]))
 
         # object larger than 4Gb cannot bcast
         htb.hr_Rmn = None
@@ -97,7 +100,7 @@ def init_htb_response_data(MPI, htb, tmin_h=-0.1, tmin_r=-0.1, open_boundary=-1,
     nR_hr = COMM.bcast(nR_hr, root=0)
     nR_r = COMM.bcast(nR_r, root=0)
 
-    if MPI_rank != 0:
+    if not MPI_main:
         R_hr = np.zeros([nR_hr, 3], dtype='int64')
         R_r = np.zeros([nR_r, 3], dtype='int64')
         Rc_hr = np.zeros([nR_hr, 3], dtype='float64')

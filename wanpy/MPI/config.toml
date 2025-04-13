@@ -71,3 +71,6 @@ centersym = false
 
 [artificial]
 ewidth_imag = 1e-6
+
+[output]
+iterprint = 500

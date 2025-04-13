@@ -12,6 +12,7 @@
 __date__ = "Jan. 3, 2019"
 
 import math
+# from numba import njit
 import numpy as np
 import numpy.linalg as LA
 from wanpy.core.units import *
@@ -20,11 +21,14 @@ from scipy import special
 __all__ = [
     'fermi_dirac_func',
     'delta_func',
+    'fermi_dirac_func_broadcast',
+    'delta_func_broadcast',
 ]
 
 '''
   * K-point integration: special points way
 '''
+# @njit
 def fermi_dirac_func(E, smear=0, ismear=0):
     """
     smear = Kb*T = beta^-1
@@ -43,7 +47,6 @@ def fermi_dirac_func(E, smear=0, ismear=0):
         x = E / smear
         x = np.clip(x, -32, 32)
         f = 1. / (np.exp(x) + 1.)
-        return f
     elif ismear == 0:
         x = E / smear
         f = 0.5 * (1. - special.erf(x))
@@ -57,12 +60,13 @@ def fermi_dirac_func(E, smear=0, ismear=0):
 
     return f
 
+# @njit
 def delta_func(E, smear=0.01, ismear=0):
     """
     smear = Kb*T = beta^-1
-    ismear = -2: Lorentzian function
-    ismear = -1: derivation of Fermi-Dirac function: -(df/dE)
     ismear = 0: Gauss function
+    ismear = -1: derivation of Fermi-Dirac function: -(df/dE)
+    ismear = -2: Lorentzian function
     ismear >= 1: Methfessel-Paxton smearing
     """
     if ismear == 0:
@@ -85,6 +89,61 @@ def delta_func_adaptive(E, v, dk, scaling=1, ewidth_max=0.1, ewidth_min=0.0001):
     smear = get_adaptive_ewidth_typeII(v, dk=dk, scaling=scaling, ewidth_max=ewidth_max, ewidth_min=ewidth_min)
     x = E / smear
     delta = np.exp(-0.5 * x ** 2) / np.sqrt(2 * np.pi) / smear
+    return delta
+
+'''
+  * Broadcast version of 
+    K-point integration: special points way
+    This will significantly speedup the non-broadcast version of Fermi-Dirac function.
+'''
+def fermi_dirac_func_broadcast(E, gates, smears, ismear=-1):
+    """
+    smear = Kb*T = beta^-1
+    ismear = -1: Fermi-Dirac function
+    ismear = 0: Gauss error function
+    ismear >= 1: Methfessel-Paxton smearing
+    """
+    E_broadcast = E[None, None, :] - gates[:, None, None]   # (ngate, 1, nw)
+    smear_broadcast = smears[None, :, None]                 # (1, ntemperature, 1)
+    if ismear == -1:
+        x = E_broadcast / smear_broadcast
+        x = np.clip(x, -32, 32)
+        f = 1. / (np.exp(x) + 1.)
+    elif ismear == 0:
+        x = E_broadcast / smear_broadcast
+        f = 0.5 * (1. - special.erf(x))
+    elif ismear >= 1:
+        x = E_broadcast / smear_broadcast
+        f = 0.5 * (1. - special.erf(x))
+        for n in range(1, ismear + 1):
+            An = (-1) ** n / math.factorial(n) / 4 ** n / np.sqrt(np.pi)
+            hermite = special.hermite(2 * n - 1)
+            f += An * hermite(x) * np.exp(-x ** 2)
+    return f
+
+def delta_func_broadcast(E, gates, smears, ismear=-1):
+    """
+    smear = Kb*T = beta^-1
+    ismear = -2: Lorentzian function
+    ismear = -1: derivation of Fermi-Dirac function: -(df/dE)
+    ismear = 0: Gauss function
+    ismear >= 1: Methfessel-Paxton smearing
+    """
+    E_broadcast = E[None, None, :] - gates[:, None, None]   # (ngate, 1, nw)
+    smear_broadcast = smears[None, :, None]                 # (1, ntemperature, 1)
+    if ismear == 0:
+        x = E_broadcast / smear_broadcast
+        x = np.clip(x, -32, 32)
+        delta = np.exp(-0.5 * x ** 2) / np.sqrt(2 * np.pi) / smear_broadcast
+    elif ismear == -1:
+        x = E_broadcast / smear_broadcast / 2.0
+        x = np.clip(x, -32, 32)
+        delta = 0.25 / np.cosh(x)**2 / smear_broadcast
+    elif ismear == -2:
+        x = E_broadcast / smear_broadcast
+        delta = smear_broadcast / np.pi / (smear_broadcast ** 2 + x ** 2)
+    elif ismear >= 1:
+        delta = None
     return delta
 
 '''
@@ -391,24 +450,47 @@ def get_eye_filter(N, F):
     return eye_filter
 
 if __name__ == "__main__":
-    import matplotlib.pyplot as plt
-    smear = 0.1
-    E = np.linspace(-1, 1, 1000)
-    ismear = 3
+    pass
+    # import matplotlib.pyplot as plt
+    # smear = 0.1
+    # E = np.linspace(-1, 1, 1000)
+    # ismear = 3
+    #
+    # x = E / smear
+    # delta = np.exp(-0.5 * x ** 2) / np.sqrt(2 * np.pi) / smear
+    # # smear = 0.05
+    # # delta1 = smear / np.pi / (smear ** 2 + E ** 2)
+    #
+    # x = E / smear
+    # delta1 = np.zeros_like(E)
+    # for n in range(1, ismear + 1):
+    #     An = (-1) ** n / math.factorial(n) / 4 ** n / np.sqrt(np.pi)
+    #     hermite = special.hermite(2 * n)
+    #     delta1 += An * hermite(x) * np.exp(-x ** 2)
+    #
+    # plt.axvline(-smear, color='k', linewidth=0.4)
+    # plt.axvline(smear, color='k', linewidth=0.4)
+    # plt.plot(E, delta, 'b')
+    # plt.plot(E, delta1, 'r')
 
-    x = E / smear
-    delta = np.exp(-0.5 * x ** 2) / np.sqrt(2 * np.pi) / smear
-    # smear = 0.05
-    # delta1 = smear / np.pi / (smear ** 2 + E ** 2)
-
-    x = E / smear
-    delta1 = np.zeros_like(E)
-    for n in range(1, ismear + 1):
-        An = (-1) ** n / math.factorial(n) / 4 ** n / np.sqrt(np.pi)
-        hermite = special.hermite(2 * n)
-        delta1 += An * hermite(x) * np.exp(-x ** 2)
-
-    plt.axvline(-smear, color='k', linewidth=0.4)
-    plt.axvline(smear, color='k', linewidth=0.4)
-    plt.plot(E, delta, 'b')
-    plt.plot(E, delta1, 'r')
+    # import wanpy as wp
+    # nw = 600
+    # ismear = 1
+    #
+    # E = np.sort(np.random.random(nw))
+    # gates = np.linspace(-1, 1, 101)
+    # smears = np.linspace(10, 300, 20) * wp.Kb
+    # ngate, ntemperature = gates.shape[0], smears.shape[0]
+    #
+    # # f_boost = -1 * fermi_dirac_func_broadcast(E, gates, smears, ismear=ismear)
+    # pf_boost = -1 * delta_func_broadcast(E, gates, smears, ismear=ismear)
+    #
+    # f = np.zeros([ngate, ntemperature, nw], dtype='float64')
+    # pf = np.zeros([ngate, ntemperature, nw], dtype='float64')
+    # for i in range(ngate):
+    #     for j in range(ntemperature):
+    #         # f[i, j] = -1 * fermi_dirac_func(E - gates[i], smear=smears[j], ismear=ismear)
+    #         pf[i, j] = -1 * delta_func(E - gates[i], smear=smears[j], ismear=ismear)
+    #
+    # # print(np.max(np.abs(f - f_boost)))
+    # print(np.max(np.abs(pf - pf_boost)))

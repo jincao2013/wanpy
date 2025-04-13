@@ -1,4 +1,4 @@
-# Copyright (C) 2023 Jin Cao
+# Copyright (C) 2020 Jin Cao
 #
 # This file is distributed as part of the wanpy code and
 # under the terms of the GNU General Public License. See the
@@ -9,7 +9,7 @@
 #
 # https://github.com/jincao2013/wanpy
 
-__date__ = "Nov. 25, 2023"
+__date__ = "Mar. 31, 2025"
 
 import numpy as np
 import wanpy as wp

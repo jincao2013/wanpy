@@ -11,8 +11,10 @@
 
 __date__ = "Apr. 4, 2025"
 
+import time
 import tomllib
 import numpy as np
+from wanpy import __version__, __author__
 
 class Config:
     def __init__(self, MPI):
@@ -74,9 +76,18 @@ class Config:
         # Computed properties
         self.ewidth_imag = None
 
-        # Computed properties
-        self.kmesh = None
-        self.kmesh_car = None
+        # io
+        self.iterprint = None
+
+        '''
+          * to add
+        '''
+
+        '''
+          * creat when running
+        '''
+        self.timestamp = [0, 0]
+        self.nk = None
 
     def load_config(self, fname='config.toml'):
         """Load parameters from a TOML configuration file."""
@@ -153,19 +164,18 @@ class Config:
         artificial = toml_dict.get("artificial", {})
         self.ewidth_imag = artificial.get("ewidth_imag")
 
-    # def initialize_kmesh(self):
-    #     """Compute k-mesh in reciprocal space."""
-    #     kx = np.linspace(0, 1, self.nkmesh[0], endpoint=False)
-    #     ky = np.linspace(0, 1, self.nkmesh[1], endpoint=False)
-    #     kz = np.linspace(0, 1, self.nkmesh[2], endpoint=False)
-    #     kgrid = np.meshgrid(kx, ky, kz, indexing='ij')
-    #     self.kmesh = np.stack(kgrid, axis=-1).reshape(-1, 3)
-    #
-    #     # Convert k-mesh to Cartesian coordinates
-    #     self.kmesh_car = np.dot(self.kmesh - self.kmesh_shift, self.kcube)
+        # output
+        output = toml_dict.get("output", {})
+        self.iterprint = int(output.get("iterprint", 200))
 
     def print_config(self):
         if not self.MPI_main: return
+
+        print('Running on   {} total cores'.format(self.MPI_ncore))
+        print('WanPy version: {}'.format(__version__))
+        print('Author: {}'.format(__author__))
+        print()
+
         print("\n=== CONFIGURATION ===")
 
         # Job
@@ -231,7 +241,29 @@ class Config:
         print("\n[Artificial]")
         print(f"  ewidth_imag: {self.ewidth_imag}")
 
+        # output
+        print("\n[output]")
+        print(f"  iterprint: {self.iterprint}")
+
         print("\n=====================")
+
+    def start_timer(self):
+        if self.MPI_main:
+            self.timestamp[0] = time.time()
+            print('{} job start at {}.'.format(self.job, time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())))
+
+    def end_timer(self):
+        if self.MPI_main:
+            self.timestamp[1] = time.time()
+            duration = self.timestamp[1] - self.timestamp[0]
+            print('Time consuming in total {:.3f}s ({:.3f}h)'.format(duration, duration/3600))
+            print('Time per k-point per core: {:.2f}ms (nk = {})'.format(1000 * self.MPI_ncore * duration / self.nk, self.nk))
+
+    def dict_serializable(self):
+        return {
+            key: val for key, val in self.__dict__.items()
+            if key not in ['comm']
+        }
 
 # if __name__ == "__main__":
 #     # Example usage:

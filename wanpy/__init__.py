@@ -11,7 +11,7 @@
 
 __author__ = 'Jin Cao'
 __email__ = "caojin.phy@gmail.com"
-__version__ = "0.16.1"
+__version__ = "0.16.2"
 
 import os
 
@@ -24,7 +24,7 @@ if os.getenv('WANPY_ROOT_DIR') is not None:
 if os.getenv('PYGUI') in ['True', '1']:
     PYGUI = True
 
-from .core.bz import fermi_dirac_func, delta_func
+from .core.bz import fermi_dirac_func, delta_func, fermi_dirac_func_broadcast, delta_func_broadcast
 from .core.greenfunc import self_energy
 from .core.mesh import make_ws_gridR, make_mesh, make_kpath, kmold
 from .core.structure import Cell, Worbi, Htb
