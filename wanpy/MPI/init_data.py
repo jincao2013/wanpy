@@ -47,7 +47,7 @@ def init_htb_response_data(MPI, htb, tmin_h=-0.1, tmin_r=-0.1, open_boundary=-1,
     MPI_ncore = COMM.Get_size()
     MPI_main = not MPI_rank
     '''
-      * bcast 
+      * bcast
         nw, fermi, cell
         nR_hr, nR_r, R_hr, R_r, hr_Rmn, r_Ramn
         Rc_hr, Rc_r
@@ -72,8 +72,10 @@ def init_htb_response_data(MPI, htb, tmin_h=-0.1, tmin_r=-0.1, open_boundary=-1,
         )
         nw = htb.nw
 
-        Rc_hr = (htb.latt @ R_hr.T).T
-        Rc_r = (htb.latt @ R_r.T).T
+        Rc_hr = np.zeros([nR_hr, 3], dtype='float64')   # do not remove this
+        Rc_r = np.zeros([nR_r, 3], dtype='float64')     # do not remove this
+        Rc_hr += (htb.latt @ R_hr.T).T
+        Rc_r += (htb.latt @ R_r.T).T
 
         # print('')
         # print('                               -----------------------')
@@ -130,3 +132,4 @@ def init_htb_response_data(MPI, htb, tmin_h=-0.1, tmin_r=-0.1, open_boundary=-1,
     sys.stdout.flush()
 
     return htb
+
