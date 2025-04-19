@@ -12,15 +12,14 @@
 __date__ = "Nov.3, 2019"
 
 import time
-import os
 import sys
-sys.path.append(os.environ.get('PYTHONPATH'))
-
 import functools
 import numpy as np
 import numpy.linalg as LA
+from mpi4py import MPI
 
 __all__ = [
+    'MPI_Reduce_Fine_Grained',
     'MPI_Reduce',
     'MPI_Gather',
     'get_kgroups',
@@ -30,6 +29,197 @@ __all__ = [
 '''
   * KPar decorator
 '''
+class MPI_Reduce_Fine_Grained:
+    def __init__(self, config, dim, dtype='float64'):
+        comm = config.comm
+        self.comm = comm
+        self.rank = comm.Get_rank()
+        self.ncore = comm.Get_size()
+        self.is_main = (self.rank == 0)
+
+        self.dim = dim
+        self.dtype = dtype
+
+        # read info from config
+        self.config = config
+        self.iterprint = config.iterprint
+        self.kmesh = config.kmesh
+        self.nk = config.nk
+        self.kcube = config.kcube
+        self.volume_ucell = config.volume_ucell
+        self.refine_kmesh = config.refine_kmesh
+        self.kmesh_fine = config.kmesh_fine
+        self.nk_fine = config.nk_fine
+        self.nkmesh_fine = config.nkmesh_fine
+
+    def __call__(self, calculator_single_k):
+        @functools.wraps(calculator_single_k)
+        def par_cal(*args, **kwargs):
+            comm = self.comm
+
+            # Extract `kmesh` and `dim` from args or kwargs
+            # dim = kwargs.get('dim', args[0] if len(args) > 0 else None)
+            # kmesh = kwargs.get('kmesh', args[0] if len(args) > 1 else None)
+            # reture_str = kwargs.get('reture_str', args[2] if len(args) > 2 else None)
+
+            # bcast kmesh to cores
+            kmesh_local = self.bcast_kpoints(self.kmesh)
+
+            # Main Loop
+            if self.is_main:
+                print()
+                print('Enter main loop')
+            kpts_index_need_refine = []
+            result_local = np.zeros(self.dim, dtype=self.dtype)
+            for i, k in enumerate(kmesh_local, start=1):
+                if self.refine_kmesh:
+                    result_at_k = calculator_single_k(k, reture_str=True)
+                    if type(result_at_k) is np.ndarray:
+                        result_local += np.asarray(result_at_k)
+                    elif result_at_k == 'refine':
+                        kpts_index_need_refine.append(i-1)
+                    else:
+                        raise TypeError("result_at_k must be np.ndarray or str")
+                else:
+                    result_local += np.asarray(calculator_single_k(k, reture_str=False))
+
+                if i % self.iterprint == 0:
+                    print('[Rank {:<4d} {:>6d}/{:<6d}] {} Calculated k at ({:.5f} {:.5f} {:.5f})'.format(
+                        self.rank, i, kmesh_local.shape[0],
+                        time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
+                        k[0], k[1], k[2]
+                    ))
+
+            # Reduce results to main rank
+            result_global = np.zeros(self.dim, dtype=self.dtype) if self.is_main else None
+            comm.Reduce(sendbuf=result_local, recvbuf=result_global, op=MPI.SUM, root=0)
+            comm.Barrier()
+            if self.is_main:
+                result_global = result_global / self.nk / self.volume_ucell * LA.det(self.kcube)
+
+            # Get kpts need be refined and count its number
+            if self.refine_kmesh:
+                kpts_need_refine = self.gather_variable_kpts(kmesh_local[kpts_index_need_refine], root=0)
+                nk_coarse2fine = kpts_need_refine.shape[0] if self.is_main else None
+                nk_coarse2fine = comm.bcast(nk_coarse2fine, root=0)
+                self.config.nk_coarse2fine = nk_coarse2fine
+                if self.is_main:
+                    print()
+                    print(f'The refined {self.nkmesh_fine[0]}*{self.nkmesh_fine[1]}*{self.nkmesh_fine[2]} '
+                          f'grids are applied for {nk_coarse2fine} out of {self.nk} kpoints ({100*nk_coarse2fine/self.nk:.6f}%).')
+                    # self.config.kpts_need_refine = kpts_need_refine  # for debug
+
+            # Enter loop on fine grained kpoints if there are kpts need be refined
+            if self.refine_kmesh and nk_coarse2fine > 0:
+                if self.is_main:
+                    print('Enter loop on fine-grained kmesh')
+                    fine_grained_kpoints = kpts_need_refine[:, np.newaxis, :] + self.kmesh_fine[np.newaxis, :, :]
+                    fine_grained_kpoints = fine_grained_kpoints.reshape(-1, 3)
+                else:
+                    fine_grained_kpoints = None
+                fine_grained_kpoints_local = self.bcast_kpoints(fine_grained_kpoints)
+                result_refine_local = np.zeros(self.dim, dtype=self.dtype)
+                for i, k in enumerate(fine_grained_kpoints_local, start=1):
+                    result_refine_local += np.asarray(calculator_single_k(k, reture_str=False))
+                    if i % self.iterprint == 0:
+                        print('[Fine-grained][Rank {:<4d} {:>6d}/{:<6d}] {} Calculated k at ({:.5f} {:.5f} {:.5f})'.format(
+                            self.rank, i, fine_grained_kpoints_local.shape[0],
+                            time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
+                            k[0], k[1], k[2]
+                        ))
+                # Reduce results to main rank
+                result_refine_global = np.zeros(self.dim, dtype=self.dtype) if self.is_main else None
+                comm.Reduce(sendbuf=result_refine_local, recvbuf=result_refine_global, op=MPI.SUM, root=0)
+                comm.Barrier()
+                if self.is_main:
+                    result_global = result_global + result_refine_global / self.nk / self.nk_fine / self.volume_ucell * LA.det(self.kcube)
+
+            return result_global if self.is_main else None
+        return par_cal
+
+    def bcast_kpoints(self, kpoints):
+        comm = self.comm
+        # Distribute k-points
+        if self.is_main:
+            kgroups = get_kgroups(kpoints, self.ncore, mode='distributeF')
+            nk_list = [group.shape[0] for group in kgroups]
+        else:
+            kgroups, nk_list = None, None
+
+        nk_list = comm.bcast(nk_list, root=0)
+        comm.Barrier()
+
+        # Send kpoints to all cores
+        if self.is_main:
+            kmesh_local = np.ascontiguousarray(kgroups[0])
+            for i in range(1, self.ncore):
+                comm.Send(np.ascontiguousarray(kgroups[i]), dest=i)
+        else:
+            kmesh_local = np.zeros([nk_list[self.rank], 3], dtype='float64')
+            comm.Recv(kmesh_local, source=0)
+
+        comm.Barrier()
+        sys.stdout.flush()
+
+        if self.is_main:
+            del kgroups
+            print('MPI_Reduce: Distributed kmesh to all cores')
+
+        sys.stdout.flush()
+        return kmesh_local
+
+    def gather_variable_kpts(self, kpts_need_refine, root=0):
+        """
+        Gather numpy arrays of shape (nk, 3) with variable nk from all ranks to root.
+
+        Parameters:
+        -----------
+        kpts_need_refine : np.ndarray
+            Local array of shape (nk, 3) on each rank.
+        comm : MPI.Comm
+            The MPI communicator. Default is MPI.COMM_WORLD.
+        root : int
+            The rank to gather data to. Default is 0.
+
+        Returns:
+        --------
+        gathered_array : np.ndarray or None
+            Stacked array of shape (sum(nk), 3) on root, None on other ranks.
+        """
+        comm = self.comm
+        rank = comm.Get_rank()
+        MPI_ncore = comm.Get_size()
+        MPI_main = (rank == 0)
+
+        # Flatten the local array
+        sendbuf = kpts_need_refine.flatten()
+        sendcount = sendbuf.size
+
+        # Gather sizes
+        recvcounts = comm.gather(sendcount, root=root)
+
+        if rank == root:
+            displs = np.insert(np.cumsum(recvcounts), 0, 0)[0:-1]
+            recvbuf = np.empty(sum(recvcounts), dtype='d')
+        else:
+            recvbuf = None
+            displs = None
+
+        # Gather the data
+        comm.Gatherv(sendbuf, [recvbuf, recvcounts, displs, MPI.DOUBLE], root=root)
+
+        if rank == root:
+            nk_list = [count // 3 for count in recvcounts]
+            result = []
+            idx = 0
+            for nk in nk_list:
+                chunk = recvbuf[idx:idx + nk * 3].reshape((nk, 3))
+                result.append(chunk)
+                idx += nk * 3
+            return np.vstack(result)
+        else:
+            return None
+
 def MPI_Reduce(MPI, iterprint=100, dtype='float64', mpinote=False):
     def decorator(func):
         @functools.wraps(func)

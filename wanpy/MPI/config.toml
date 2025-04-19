@@ -68,9 +68,14 @@ kcube = [
 kmesh_shift = [0, 0, 0]
 random_k = false
 centersym = false
+kmesh_type = "G"
+refine_kmesh = false
+nkmesh_fine = [10, 10, 1]
 
 [artificial]
 ewidth_imag = 1e-6
+refine_kmesh_criteria = 1e-2
+refine_kmesh_nsigma = 3
 
 [output]
 iterprint = 500

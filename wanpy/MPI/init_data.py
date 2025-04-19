@@ -22,16 +22,16 @@ __all__ = [
     'init_htb_response_data',
 ]
 
-def init_kmesh(MPI, nkmesh, random_k=False, type='continuous', centersym=False,
-               diagbasis=True, kcube=np.identity(3), kmesh_shift=0.,
-               mesh_dtype='float64'
+def init_kmesh(MPI, nkmesh, random_k=False, centersym=False,
+               kcube=np.identity(3), kmesh_shift=0.,
+               dtype='float64'
                ):
     COMM = MPI.COMM_WORLD
     MPI_rank = COMM.Get_rank()
     MPI_main = not MPI_rank
     if MPI_main:
-        kmesh = make_mesh(nkmesh, basis=kcube, diagbasis=diagbasis, mesh_shift=kmesh_shift,
-                          mesh_dtype=mesh_dtype, mesh_type=type, centersym=centersym,
+        kmesh = make_mesh(nkmesh, basis=kcube, mesh_shift=kmesh_shift,
+                          dtype=dtype, mesh_type="Continuous", centersym=centersym,
                           info=True)
         if random_k:
             np.random.shuffle(kmesh)

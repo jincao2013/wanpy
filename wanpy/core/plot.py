@@ -37,7 +37,7 @@ def plot_matrix2(A, setnorm=False):
     plt.colorbar()
     plt.show()
 
-def plot_grid(grid, lattice=None, XX=None, YY=None):
+def plot_grid(grid, lattice=None, XX=None, YY=None, color='#607d8b'):
     import matplotlib.pyplot as plt
     import matplotlib.path as mpath
     import matplotlib.patches as mpatches
@@ -46,10 +46,6 @@ def plot_grid(grid, lattice=None, XX=None, YY=None):
     plt.clf()
 
     plt.scatter(grid[:, 0], grid[:, 1], alpha=0.5)
-
-    if XX is not None and YY is not None:
-        plt.axis([XX[0], XX[1], YY[0], YY[1]])
-    plt.axis('equal')
 
     if lattice is not None:
         cube = lattice[:2, :2].T
@@ -62,8 +58,12 @@ def plot_grid(grid, lattice=None, XX=None, YY=None):
         ]
         codes, verts = zip(*path_data)
         path = mpath.Path(verts, codes)
-        patch = mpatches.PathPatch(path, facecolor='#607d8b', alpha=0.3)
+        patch = mpatches.PathPatch(path, facecolor=color, alpha=0.3)
         plt.gca().add_patch(patch)
+
+    if XX is not None and YY is not None:
+        plt.axis([XX[0], XX[1], YY[0], YY[1]])
+    plt.axis('equal')
 
     plt.show()
 

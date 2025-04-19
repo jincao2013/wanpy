@@ -10,5 +10,5 @@
 # https://github.com/jincao2013/wanpy
 
 from .init_data import init_kmesh, init_htb_response_data
-from .MPI import MPI_Reduce, MPI_Gather, get_kgroups, parprint
+from .MPI import MPI_Reduce_Fine_Grained, MPI_Reduce, MPI_Gather, get_kgroups, parprint
 from .config import Config

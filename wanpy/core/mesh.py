@@ -12,6 +12,7 @@
 __date__ = "Aug. 11, 2017"
 
 import time
+from typing import Union
 import numpy as np
 from numpy import linalg as LA
 
@@ -97,130 +98,130 @@ def make_ws_gridR(ngridR, latt, info=True):
 '''
   * k mesh
 '''
-# def make_mesh(nmesh, type='continuous', centersym=False, basis=np.identity(3), mesh_shift=0., info=False):
-#     T0 = time.time()
-#     '''
-#     * type = continuous, discrete
-#     * centersym = False, True
-#     * basis = np.array([f1, f2, f3])
-#
-#     `basis` is used to get custom shape of BZ,
-#     the original BZ is defined by `lattG`
-#         lattG = np.array([
-#             [b11, b21, b31],
-#             [b12, b22, b32],
-#             [b13, b23, b33],
-#         ])
-#     the new BZ is defined as
-#         lattG'[0] = f11 b1 + f12 b2 + f13 b3
-#         lattG'[1] = f21 b1 + f22 b2 + f23 b3
-#         lattG'[2] = f31 b1 + f32 b2 + f33 b3
-#     it is obtained by
-#         lattG' = lattG @ basis.T                (1)
-#     where basis is defined as
-#         basis.T = np.array([
-#             [f11, f21, f31],
-#             [f12, f22, f32],
-#             [f13, f23, f33],
-#         ])
-#     or
-#         basis = np.array([f1, f2, f3])          (2)
-#
-#     '''  #
-#     N1, N2, N3 = nmesh
-#     N = N1 * N2 * N3
-#     # n1, n2, n3 = np.meshgrid(np.arange(N1), np.arange(N2), np.arange(N3), indexing='ij')
-#     n1, n2, n3 = np.mgrid[0:N1:1, 0:N2:1, 0:N3:1]
-#     mesh = np.array([n1.flatten(), n2.flatten(), n3.flatten()], dtype='float64').T
-#
-#     if centersym:
-#         if not (np.mod(nmesh, 2) == 1).all():
-#             print('centersym mesh need odd number of [nmesh]')
-#             return 'centersym mesh need odd number of [nmesh]'
-#         else:
-#             mesh -= mesh[N // 2]
-#     if type[0].lower() == 'c':
-#         mesh /= nmesh
-#
-#     # mesh = LA.multi_dot([basis.T, mesh.T]).T + mesh_shift
-#     mesh = (basis.T @ mesh.T).T + mesh_shift
-#     mesh = np.ascontiguousarray(mesh)
-#     if info:
-#         print('Make mesh complited. Time consuming {} s'.format(time.time()-T0))
-#
-#     return mesh
+def make_mesh(
+        nmesh,
+        basis=np.eye(3),
+        mesh_shift=0.,
+        dtype='float64',
+        mesh_type='Continuous',
+        kmesh_type='Gamma',
+        centersym=False,
+        info=False
+    ) -> Union[np.ndarray, str]:
+    """
+    Generates a mesh grid based on the provided parameters.
 
+    Parameters:
+    ----------
+    nmesh : np.ndarray of int
+        Number of mesh points in each dimension (N1, N2, N3).
+    basis : np.ndarray, optional
+        A 3x3 matrix defining the basis vectors for the mesh.
+        Default is the identity matrix (unit cube).
+    mesh_shift : np.ndarray of float, optional
+        Shift applied to the mesh points. Default is 0.0.
+    dtype : str, optional
+        Data type of the mesh points. Default is 'float64'.
+    mesh_type : str, optional
+        Type of mesh ('continuous' or 'discrete'). Default is 'continuous'.
+    kmesh_type : str, optional
+        Type of BZ sampling ('Gamma' or 'MP'). Default is 'Gamma'.
+    centersym : bool, optional
+        If True, ensures the mesh is symmetric around the center.
+        Only valid for odd numbers in `nmesh`. Default is False.
+    info : bool, optional
+        If True, prints timing information. Default is False.
 
-def make_mesh(nmesh, basis=np.identity(3), diagbasis=True, mesh_shift=0.,
-              mesh_dtype='float64', mesh_type='continuous', centersym=False,
-              info=False
-              ):
-    T0 = time.time()
-    '''
+    Returns:
+    -------
+    np.ndarray
+        The generated mesh grid as an Nx3 array, where N = N1 * N2 * N3.
+    str
+        Error message.
+
+    Notes:
+    -----
     * type = continuous, discrete
     * centersym = False, True
-    * basis = np.array([f1, f2, f3]) 
+    * basis = np.array([f1, f2, f3])
 
-    `basis` is used to get custom shape of BZ, 
+    `basis` is used to get custom shape of BZ,
     the original BZ is defined by `lattG`
         lattG = np.array([
             [b11, b21, b31],
             [b12, b22, b32],
             [b13, b23, b33],
         ])
-    the new BZ is defined as  
+    the new BZ is defined as
         lattG'[0] = f11 b1 + f12 b2 + f13 b3
         lattG'[1] = f21 b1 + f22 b2 + f23 b3
         lattG'[2] = f31 b1 + f32 b2 + f33 b3
-    it is obtained by 
+    it is obtained by
         lattG' = lattG @ basis.T                (1)
-    where basis is defined as 
+    where basis is defined as
         basis.T = np.array([
             [f11, f21, f31],
             [f12, f22, f32],
             [f13, f23, f33],
         ])
-    or 
+    or
         basis = np.array([f1, f2, f3])          (2)
 
-    '''  #
+    """
+    T0 = time.time()
+
+    # Unpack nmesh
     N1, N2, N3 = nmesh
     N = N1 * N2 * N3
-    # mesh_dtype = 'float64'
-    rangN1 = np.arange(N1, dtype=mesh_dtype)
-    rangN2 = np.arange(N2, dtype=mesh_dtype)
-    rangN3 = np.arange(N3, dtype=mesh_dtype)
-    onesN1 = np.ones(N1, dtype=mesh_dtype)
-    onesN2 = np.ones(N2, dtype=mesh_dtype)
-    onesN3 = np.ones(N3, dtype=mesh_dtype)
-    mesh = np.zeros([N, 3], dtype=mesh_dtype)
+
+    # Create 1D ranges for each dimension
+    rangN1 = np.arange(N1, dtype=dtype)
+    rangN2 = np.arange(N2, dtype=dtype)
+    rangN3 = np.arange(N3, dtype=dtype)
+    onesN1 = np.ones(N1, dtype=dtype)
+    onesN2 = np.ones(N2, dtype=dtype)
+    onesN3 = np.ones(N3, dtype=dtype)
+
+    # Create the full 3D mesh
+    mesh = np.zeros([N, 3], dtype=dtype)
     mesh.T[0] = np.kron(rangN1, np.kron(onesN2, onesN3))
     mesh.T[1] = np.kron(onesN1, np.kron(rangN2, onesN3))
     mesh.T[2] = np.kron(onesN1, np.kron(onesN2, rangN3))
 
+    # Handle center symmetry (centersym)
     if centersym:
         if not (np.mod(nmesh, 2) == 1).all():
             print('centersym mesh need odd number of [nmesh]')
             return 'centersym mesh need odd number of [nmesh]'
         else:
             mesh -= mesh[N // 2]
-    if mesh_type[0].lower() == 'c':
-        mesh /= nmesh
 
-    # scales and shift the mesh
-    if diagbasis:
+    # 'Gamma-centered mesh' or 'Monkhorst-Pack mesh'
+    if kmesh_type[0].upper() == "M":
+        mesh[:, 0] += (0 - N1) / 2
+        mesh[:, 1] += (0 - N2) / 2
+        # mesh[:, 2] += (0 - N3) / 2
+
+    # 'Continuous' or 'Discrete'
+    if mesh_type[0].upper() == "C":
+        mesh /= np.array(nmesh, dtype=dtype)
+
+    # Scale and shift the mesh
+    if np.max(np.abs(basis - np.diag(np.diag(basis)))) < 1e-3:
         mesh *= np.diag(basis)
     else:
-        # this will use large amount of memory
+        # Full basis transformation
+        # This will use large amount of memory
         mesh = (basis.T @ mesh.T).T
         mesh = np.ascontiguousarray(mesh)
-    mesh += mesh_shift
+
+    # Apply mesh shift
+    mesh += np.array(mesh_shift)
 
     if info:
         print('Make mesh complited. Time consuming {} s'.format(time.time() - T0))
 
     return mesh
-
 
 def make_kpath(kpath_list, nk1):
 
@@ -245,7 +246,6 @@ def make_kpath(kpath_list, nk1):
 
     return kmesh_1d
 
-
 def make_kpath_dev(kpath_HSP, nk1, keep_boundary=True):
 
     kpath_HSP = np.array(kpath_HSP, dtype='float64')
@@ -262,101 +262,6 @@ def make_kpath_dev(kpath_HSP, nk1, keep_boundary=True):
         kpath = np.vstack([kpath, kpath_HSP[-1]])
 
     return kpath
-
-
-def make_kmesh_2d(kplane_in_bulk,nk1,nk2,sample_method='G'):
-
-    # print('\n')
-    # print("[from make_kmesh_2d] Attention : ")
-    # print("[from make_kmesh_2d] kplane_in_bulk should in unit of b1 b2 b3")
-    '''
-
-    :param kplane_in_bulk:
-            [[Original point of concerned Kplane],
-             [1st vector to define this Kplane],
-             [2ed vector to define this Kplane]]
-
-           sample_method:
-                'MP'  or  'G'
-    :return:
-            kmesh_2d = np.array([
-               [k1x, k1y, k1z],
-               ...
-
-            ])
-    '''
-    s0 = np.array(kplane_in_bulk[0])
-    b1 = np.array(kplane_in_bulk[1])
-    b2 = np.array(kplane_in_bulk[2])
-
-    if sample_method == 'MP':
-        kmesh_2d = np.zeros((nk1*nk2, 3))
-        i = 0
-        for n1 in range(nk1):
-            for n2 in range(nk2):
-                k = b1 * (n1+0.5)/nk1 + b2 * (n2+0.5)/nk2 + s0
-                kmesh_2d[i] = k
-                i = i + 1
-    elif sample_method == 'G':
-        kmesh_2d = np.zeros((nk1*nk2, 3))
-        i = 0
-        for n1 in range(nk1):
-            for n2 in range(nk2):
-                k = b1 * n1/nk1 + b2 * n2/nk2 + s0
-                kmesh_2d[i] = k
-                i = i + 1
-
-    print('kmesh_2d complited')
-    return kmesh_2d
-
-def make_kmesh_3d(kcube_in_bulk,nk1,nk2,nk3,sample_method='G'):
-
-    # print('\n')
-    # print("[from make_kmesh_3d] Attention : ")
-    # print("[from make_kmesh_3d] kcube_in_bulk should in unit of b1 b2 b3")
-    '''
-
-    :param kcube_in_bulk:
-            [[Original point of concerned Kcube],
-             [1st vector to define this Kcube],
-             [2ed vector to define this Kcube],
-             [3th vector to define this Kcube]]
-
-           sample_method:
-                'MP'  or  'G'
-    :return:
-            kmesh_3d = np.array([
-               [k1x, k1y, k1z],
-               ...
-
-            ])
-    '''
-    s0 = np.array(kcube_in_bulk[0])
-    base1 = np.array(kcube_in_bulk[1])
-    base2 = np.array(kcube_in_bulk[2])
-    base3 = np.array(kcube_in_bulk[3])
-
-    if sample_method == 'MP':
-        kmesh_3d = np.zeros((nk1*nk2*nk3,3))
-        i = 0
-        for n1 in range(nk1):
-            for n2 in range(nk2):
-                for n3 in range(nk3):
-                    k = base1 * (n1+0.5)/nk1 + base2 * (n2+0.5)/nk2 + base3 * (n3+0.5)/nk3 + s0
-                    kmesh_3d[i] = k
-                    i = i + 1
-    elif sample_method == 'G':
-        kmesh_3d = np.zeros((nk1*nk2*nk3,3 ))
-        i = 0
-        for n1 in range(nk1):
-            for n2 in range(nk2):
-                for n3 in range(nk3):
-                    k = base1 * n1/nk1 + base2 * n2/nk2 + base3 * n3/nk3 + s0
-                    kmesh_3d[i] = k
-                    i = i + 1
-    print('kmesh_3d complited')
-    return kmesh_3d
-
 
 def make_kmesh_dev001(nk1, nk2, nk3, sample_method='G', kcube=None, info=True):
     T0 = time.time()
@@ -379,7 +284,7 @@ def make_kmesh_dev001(nk1, nk2, nk3, sample_method='G', kcube=None, info=True):
                ...
 
             ])
-    
+
     '''
     if kcube is None:
         kcube = np.array([
@@ -411,158 +316,11 @@ def make_kmesh_dev001(nk1, nk2, nk3, sample_method='G', kcube=None, info=True):
         print('Sample BZ complited. Time consuming {} s'.format(time.time()-T0))
     return kmesh
 
-
-def make_kmesh_dev002(nk1, nk2, nk3, sample_method='G', kcube=None, info=True):
-    T0 = time.time()
-    '''
-    :param kcube:
-            [[Original point of concerned Kcube],
-             [1st vector to define this Kcube],
-             [2ed vector to define this Kcube],
-             [3th vector to define this Kcube]]
-
-           sample_method:
-                'MP'  or  'G'
-    :return:
-            kmesh_3d = np.array([
-               [k1x, k1y, k1z],
-               ...
-
-            ])
-    
-    '''
-    Nk = nk1 * nk2 * nk3
-    if kcube is None:
-        kcube = np.array([
-            [0, 0, 0],
-            [1, 0, 0],
-            [0, 1, 0],
-            [0, 0, 1],
-        ], dtype='float64')
-    else:
-        kcube = np.array(kcube)
-    if sample_method == 'G':
-        pass
-    elif sample_method == 'MP':
-        kcube[0] += np.array([kcube[1,0] / 2 / nk1, kcube[2,1] / 2 / nk2, kcube[3,2] / 2 / nk3])
-    base = kcube[1:]
-
-    n2, n1, n3 = np.meshgrid(np.arange(nk2), np.arange(nk1), np.arange(nk3))
-    D = np.array([n1.reshape(Nk), n2.reshape(Nk), n3.reshape(Nk)], dtype='float64').T
-    D[:,0] /= nk1
-    D[:,1] /= nk2
-    D[:,2] /= nk3
-
-    kmesh = np.dot(D, base) + kcube[0]
-
-    if info:
-        print('Sample BZ complited. Time consuming {} s'.format(time.time()-T0))
-    return kmesh
-
-
-def make_kmesh(nk1, nk2, nk3, sample_method='G', kcube=None, info=True):
-    return make_kmesh_dev002(nk1, nk2, nk3, sample_method, kcube, info)
-
-
-def make_kmesh_3dmgrid(kcube_in_bulk,nk1,nk2,nk3,sample_method='G'):
-
-    # print("[from make_kmesh_3d] Attention : ")
-    # print("[from make_kmesh_3d] kplane_in_bulk should in unit of b1 b2 b3")
-    '''
-
-    :param kcube_in_bulk:
-            [[Original point of concerned Kcube],
-             [1st vector to define this Kcube],
-             [2ed vector to define this Kcube],
-             [3th vector to define this Kcube]]
-
-           sample_method:
-                'MP'  or  'G'
-    :return:
-            kmesh_3d = np.mgrid format
-    '''
-    s0 = np.array(kcube_in_bulk[0])
-    base1 = np.array(kcube_in_bulk[1])
-    base2 = np.array(kcube_in_bulk[2])
-    base3 = np.array(kcube_in_bulk[3])
-
-    base1 = base1 - s0
-    base2 = base2 - s0
-    base3 = base3 - s0
-
-    if sample_method == 'G':
-        kmesh_3d_i = np.zeros((nk1, nk2, nk3))
-        kmesh_3d_j = np.zeros((nk1, nk2, nk3))
-        kmesh_3d_k = np.zeros((nk1, nk2, nk3))
-
-        i = 0
-        for n1 in range(nk1):
-            for n2 in range(nk2):
-                for n3 in range(nk3):
-                    k = base1 * (n1+0.5)/nk1 + \
-                        base2 * (n2+0.5)/nk2 + \
-                        base3 * (n3+0.5)/nk3
-                    kmesh_3d_i[n1][n2][n3] = k[0]
-                    kmesh_3d_j[n1][n2][n3] = k[1]
-                    kmesh_3d_k[n1][n2][n3] = k[2]
-                    i = i + 1
-    elif sample_method == 'MP':
-        kmesh_3d_i = np.zeros((nk1+1, nk2+1, nk3+1))
-        kmesh_3d_j = np.zeros((nk1+1, nk2+1, nk3+1))
-        kmesh_3d_k = np.zeros((nk1+1, nk2+1, nk3+1))
-        i = 0
-        for n1 in range(nk1 + 1):
-            for n2 in range(nk2 + 1):
-                for n3 in range(nk3 + 1):
-                    k = base1 * n1/nk1 + \
-                        base2 * n2/nk2 + \
-                        base3 * n3/nk3
-                    kmesh_3d_i[n1][n2][n3] = k[0]
-                    kmesh_3d_j[n1][n2][n3] = k[1]
-                    kmesh_3d_k[n1][n2][n3] = k[2]
-                    i = i + 1
-
-    return kmesh_3d_i, kmesh_3d_j, kmesh_3d_k
-
-def mgrid_CUBE(n1, n2, n3, lattice, sample_method='MP', cube=None):
-    if cube is None:
-        cube = np.array([
-            [0, 0, 0],
-            [1, 0, 0],
-            [0, 1, 0],
-            [0, 0, 1],
-        ], dtype='float64')
-    else:
-        cube = np.array(cube)
-    if sample_method == 'MP':
-        cube[0] += np.array([cube[1,0] / 2 / n1, cube[2,1] / 2 / n2, cube[3,2] / 2 / n3])
-    D = np.array([
-        [_n1, _n2, _n3]
-        for _n1 in range(n1)
-        for _n2 in range(n2)
-        for _n3 in range(n3)
-    ], dtype='float64')
-    D[:,0] *= 1/n1
-    D[:,1] *= 1/n2
-    D[:,2] *= 1/n3
-
-    base = cube[1:]
-    mesh = np.dot(D, base) + cube[0]
-
-    meshc = np.einsum('ij,nj->ni', lattice, mesh, optimize=True)
-    x = meshc[:,0].reshape(n1, n2, n3)
-    y = meshc[:,1].reshape(n1, n2, n3)
-    z = meshc[:,2].reshape(n1, n2, n3)
-
-    return x, y, z
-
-
-def make_gridR(N1, N2, N3):
-    N = N1 * N2 * N3
-    n2, n1, n3 = np.meshgrid(np.arange(N2), np.arange(N1), np.arange(N3))
-    gridR = np.array([n1.reshape(N), n2.reshape(N), n3.reshape(N)]).T
-    return gridR
-
+# def make_gridR(N1, N2, N3):
+#     N = N1 * N2 * N3
+#     n2, n1, n3 = np.meshgrid(np.arange(N2), np.arange(N1), np.arange(N3))
+#     gridR = np.array([n1.reshape(N), n2.reshape(N), n3.reshape(N)]).T
+#     return gridR
 
 def kmold(kkc):
     nk = kkc.shape[0]
@@ -573,7 +331,7 @@ def kmold(kkc):
     return k_mold
 
 if __name__ == '__main__':
-    import matplotlib.pyplot as plt
+    # import matplotlib.pyplot as plt
     import numpy.linalg as LA
     import time
 
@@ -597,19 +355,19 @@ if __name__ == '__main__':
     #ir_kpoints = make_kmesh_3d(kcube_in_bulk, nk1, nk2, nk3, sample_method='G')
 
     T0 = time.time()
-    kmesh = make_kmesh_dev001(nk1, nk2, nk3, sample_method, kcube_in_bulk)
-    print('Time consuming {} s'.format(time.time()-T0))
-
-    plt.figure(figsize=(7, 7))
-    plt.axis([-1, 1, -1, 1])
-    print(kmesh)
-
-    for k in kmesh:
-        # if k[2] != 0: continue
-        plt.scatter(k[0], k[1], s=200, c='#d81b60',
-                    alpha=0.5,
-                    marker='o',
-                    )
-    plt.grid()
-    plt.show()
+    # kmesh = make_kmesh_dev001(nk1, nk2, nk3, sample_method, kcube_in_bulk)
+    # print('Time consuming {} s'.format(time.time()-T0))
+    #
+    # plt.figure(figsize=(7, 7))
+    # plt.axis([-1, 1, -1, 1])
+    # print(kmesh)
+    #
+    # for k in kmesh:
+    #     # if k[2] != 0: continue
+    #     plt.scatter(k[0], k[1], s=200, c='#d81b60',
+    #                 alpha=0.5,
+    #                 marker='o',
+    #                 )
+    # plt.grid()
+    # plt.show()
 
